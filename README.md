@@ -34,6 +34,7 @@ npm install -g gut-cli
 | `gut summary` | Generate work summary (daily/weekly reports) |
 | `gut config` | Manage configuration (language, etc.) |
 | `gut lang` | Set or show output language |
+| `gut init` | Initialize .gut/ templates in your project |
 
 ### `gut commit`
 
@@ -367,6 +368,26 @@ gut config get lang
 **Configuration precedence:**
 1. Local: `.gut/config.json` (per-repository)
 2. Global: `~/.config/gut/config.json`
+
+### `gut init`
+
+Initialize `.gut/` templates in your project for customization.
+
+```bash
+# Copy all templates to .gut/ (translates if language is not English)
+gut init
+
+# Force overwrite existing templates
+gut init --force
+
+# Skip translation (copy English templates as-is)
+gut init --no-translate
+
+# Use specific provider for translation
+gut init --provider openai
+```
+
+Templates are automatically translated to your configured language (set via `gut lang`).
 
 ### `gut cleanup`
 

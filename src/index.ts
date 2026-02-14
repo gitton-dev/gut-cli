@@ -15,6 +15,7 @@ import { stashCommand } from './commands/stash.js'
 import { summaryCommand } from './commands/summary.js'
 import { configCommand } from './commands/config.js'
 import { langCommand } from './commands/lang.js'
+import { initCommand } from './commands/init.js'
 
 const program = new Command()
 
@@ -46,5 +47,6 @@ program.addCommand(summaryCommand)
 // Configuration
 program.addCommand(configCommand)
 program.addCommand(langCommand)
+program.addCommand(initCommand)
 
 program.parse()
