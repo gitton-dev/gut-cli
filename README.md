@@ -4,9 +4,11 @@
 
 ## Why gut?
 
-- **Fast** - Unlike AI coding assistants that analyze your entire codebase, gut focuses only on git operations. Get commit messages, PR descriptions, and code reviews in seconds.
-- **No subscription required** - Use your own API key from Gemini, OpenAI, or Anthropic. No monthly fees for an AI coding assistant.
-- **Secure** - API keys are stored in your system's native keychain (macOS Keychain, Windows Credential Vault, Linux Secret Service), not in plain text files.
+Working with git involves many small decisions that add up: writing clear commit messages, naming branches, describing pull requests, coming up with stash names you'll actually remember. These tasks aren't hard, but they interrupt your flow and take more time than they should.
+
+gut handles these for you. Unlike AI coding assistants that analyze your entire codebase, gut focuses only on git operations—so it's fast. You get results in seconds, not minutes.
+
+No subscription required. Just bring your own API key from Gemini, OpenAI, or Anthropic. Your keys are stored securely in your system's native keychain, never in plain text.
 
 ## Installation
 
