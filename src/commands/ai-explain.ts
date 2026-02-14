@@ -24,10 +24,11 @@ function findExplainContext(repoRoot: string): string | null {
 
 export const aiExplainCommand = new Command('ai-explain')
   .alias('explain')
-  .description('Get an AI-powered explanation of a commit, PR, or file changes')
-  .argument('[target]', 'Commit hash, PR number, PR URL, or file path')
+  .description('Get an AI-powered explanation of changes, commits, PRs, or files')
+  .argument('[target]', 'Commit hash, PR number, PR URL, or file path (default: uncommitted changes)')
   .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
+  .option('-s, --staged', 'Explain only staged changes')
   .option('-n, --commits <n>', 'Number of commits to analyze for file history (default: 1)', '1')
   .option('--history', 'Explain file change history instead of content')
   .option('--json', 'Output as JSON')
@@ -47,25 +48,29 @@ export const aiExplainCommand = new Command('ai-explain')
     try {
       let context: ExplainContext
 
-      if (!target) {
-        // Default to HEAD
-        target = 'HEAD'
-      }
-
-      // Detect target type: PR, file, or commit
-      const isPR = target.match(/^#?\d+$/) || target.includes('/pull/')
-      const isFile = existsSync(target)
-
-      if (isPR) {
-        context = await getPRContext(target, spinner)
-      } else if (isFile) {
-        if (options.history) {
-          context = await getFileHistoryContext(target, git, spinner, parseInt(options.commits, 10))
+      // Handle staged-only or uncommitted changes (no target)
+      if (!target || options.staged) {
+        if (options.staged) {
+          context = await getStagedContext(git, spinner)
         } else {
-          context = await getFileContentContext(target, spinner)
+          context = await getUncommittedContext(git, spinner)
         }
       } else {
-        context = await getCommitContext(target, git, spinner)
+        // Detect target type: PR, file, or commit
+        const isPR = target.match(/^#?\d+$/) || target.includes('/pull/')
+        const isFile = existsSync(target)
+
+        if (isPR) {
+          context = await getPRContext(target, spinner)
+        } else if (isFile) {
+          if (options.history) {
+            context = await getFileHistoryContext(target, git, spinner, parseInt(options.commits, 10))
+          } else {
+            context = await getFileContentContext(target, spinner)
+          }
+        } else {
+          context = await getCommitContext(target, git, spinner)
+        }
       }
 
       // Find project context
@@ -97,7 +102,7 @@ export const aiExplainCommand = new Command('ai-explain')
   })
 
 interface ExplainContext {
-  type: 'commit' | 'pr' | 'file-history' | 'file-content'
+  type: 'commit' | 'pr' | 'file-history' | 'file-content' | 'uncommitted' | 'staged'
   title: string
   diff?: string
   content?: string
@@ -111,6 +116,48 @@ interface ExplainContext {
     headBranch?: string
     commits?: string[]
     filePath?: string
+  }
+}
+
+async function getUncommittedContext(
+  git: ReturnType<typeof simpleGit>,
+  spinner: ReturnType<typeof ora>
+): Promise<ExplainContext> {
+  spinner.text = 'Analyzing uncommitted changes...'
+
+  const stagedDiff = await git.diff(['--cached'])
+  const unstagedDiff = await git.diff()
+  const diff = (stagedDiff + '\n' + unstagedDiff).trim()
+
+  if (!diff) {
+    throw new Error('No uncommitted changes to analyze')
+  }
+
+  return {
+    type: 'uncommitted',
+    title: 'Uncommitted changes',
+    diff,
+    metadata: {}
+  }
+}
+
+async function getStagedContext(
+  git: ReturnType<typeof simpleGit>,
+  spinner: ReturnType<typeof ora>
+): Promise<ExplainContext> {
+  spinner.text = 'Analyzing staged changes...'
+
+  const diff = await git.diff(['--cached'])
+
+  if (!diff.trim()) {
+    throw new Error('No staged changes to analyze')
+  }
+
+  return {
+    type: 'staged',
+    title: 'Staged changes',
+    diff,
+    metadata: {}
   }
 }
 
@@ -278,12 +325,14 @@ interface Explanation {
   notes?: string[]
 }
 
-function printExplanation(explanation: Explanation, type: 'commit' | 'pr' | 'file-history' | 'file-content') {
+function printExplanation(explanation: Explanation, type: 'commit' | 'pr' | 'file-history' | 'file-content' | 'uncommitted' | 'staged') {
   const icons: Record<string, string> = {
     pr: '🔀',
     'file-content': '📄',
     'file-history': '📜',
-    commit: '📝'
+    commit: '📝',
+    uncommitted: '✏️',
+    staged: '📋'
   }
   const icon = icons[type] || '📝'
   console.log(chalk.bold(`\n${icon} Explanation\n`))

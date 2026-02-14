@@ -173,49 +173,6 @@ const CodeReviewSchema = z.object({
 
 export type CodeReview = z.infer<typeof CodeReviewSchema>
 
-const DiffSummarySchema = z.object({
-  summary: z.string().describe('Brief one-line summary of what changed'),
-  changes: z.array(
-    z.object({
-      file: z.string(),
-      description: z.string().describe('What changed in this file')
-    })
-  ),
-  impact: z.string().describe('What impact these changes have on the codebase'),
-  notes: z.array(z.string()).optional().describe('Any important notes or considerations')
-})
-
-export type DiffSummary = z.infer<typeof DiffSummarySchema>
-
-export async function generateDiffSummary(
-  diff: string,
-  options: AIOptions
-): Promise<DiffSummary> {
-  const model = await getModel(options)
-
-  const result = await generateObject({
-    model,
-    schema: DiffSummarySchema,
-    prompt: `You are an expert at explaining code changes in a clear and concise way.
-
-Analyze the following git diff and provide a human-friendly summary.
-
-Focus on:
-- What was changed and why it might have been changed
-- The purpose and impact of the changes
-- Any notable patterns or refactoring
-
-Git diff:
-\`\`\`
-${diff.slice(0, 10000)}
-\`\`\`
-
-Explain the changes in plain language that any developer can understand.`
-  })
-
-  return result.object
-}
-
 export async function generateCodeReview(
   diff: string,
   options: AIOptions
@@ -342,7 +299,7 @@ export type Explanation = z.infer<typeof ExplanationSchema>
 
 export async function generateExplanation(
   context: {
-    type: 'commit' | 'pr' | 'file-history' | 'file-content'
+    type: 'commit' | 'pr' | 'file-history' | 'file-content' | 'uncommitted' | 'staged'
     title: string
     diff?: string
     content?: string
@@ -400,8 +357,10 @@ Explain in a way that helps someone quickly understand this file's purpose and h
     return result.object
   }
 
-  // Handle diff-based explanations (commits, PRs, file history)
+  // Handle diff-based explanations (commits, PRs, file history, uncommitted, staged)
   let contextInfo: string
+  let targetType: string
+
   if (context.type === 'pr') {
     contextInfo = `
 Pull Request: #${context.metadata.prNumber}
@@ -410,6 +369,7 @@ Branch: ${context.metadata.headBranch} -> ${context.metadata.baseBranch}
 Commits:
 ${context.metadata.commits?.map((c) => `- ${c}`).join('\n') || 'N/A'}
 `
+    targetType = 'pull request'
   } else if (context.type === 'file-history') {
     contextInfo = `
 File: ${context.metadata.filePath}
@@ -418,6 +378,12 @@ ${context.metadata.commits?.map((c) => `- ${c}`).join('\n') || 'N/A'}
 Latest author: ${context.metadata.author}
 Latest date: ${context.metadata.date}
 `
+    targetType = 'file changes'
+  } else if (context.type === 'uncommitted' || context.type === 'staged') {
+    contextInfo = `
+${context.type === 'staged' ? 'Staged changes (ready to commit)' : 'Uncommitted changes (work in progress)'}
+`
+    targetType = context.type === 'staged' ? 'staged changes' : 'uncommitted changes'
   } else {
     contextInfo = `
 Commit: ${context.metadata.hash?.slice(0, 7)}
@@ -425,9 +391,8 @@ Message: ${context.title}
 Author: ${context.metadata.author}
 Date: ${context.metadata.date}
 `
+    targetType = 'commit'
   }
-
-  const targetType = context.type === 'pr' ? 'pull request' : context.type === 'file-history' ? 'file changes' : 'commit'
 
   const result = await generateObject({
     model,

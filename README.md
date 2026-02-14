@@ -17,9 +17,8 @@ All AI commands support short aliases (without `ai-` prefix):
 | `gut ai-commit` | `gut commit` | Generate commit messages |
 | `gut ai-pr` | `gut pr` | Generate PR descriptions |
 | `gut ai-review` | `gut review` | Code review |
-| `gut ai-diff` | `gut diff` | Explain changes |
 | `gut ai-merge` | `gut merge` | Resolve merge conflicts |
-| `gut ai-explain` | `gut explain` | Explain commits, PRs, or files |
+| `gut ai-explain` | `gut explain` | Explain changes, commits, PRs, or files |
 | `gut ai-find` | `gut find` | Find commits by vague description |
 | `gut changelog` | - | Generate changelogs |
 
@@ -88,24 +87,6 @@ gut review 123
 gut review --json
 ```
 
-### `gut diff`
-
-Get an AI-powered explanation of your changes.
-
-```bash
-# Explain all uncommitted changes
-gut diff
-
-# Explain staged changes only
-gut diff --staged
-
-# Explain specific commit
-gut diff --commit abc123
-
-# Output as JSON
-gut diff --json
-```
-
 ### `gut merge`
 
 Merge branches with AI-powered conflict resolution.
@@ -123,17 +104,14 @@ gut merge feature/login --no-commit
 
 ### `gut explain`
 
-Get AI-powered explanations of commits, PRs, or file contents.
+Get AI-powered explanations of changes, commits, PRs, or file contents.
 
 ```bash
-# Explain a file's purpose and contents (default)
-gut explain src/index.ts
+# Explain uncommitted changes (default)
+gut explain
 
-# Explain file's recent change history
-gut explain src/index.ts --history
-
-# Explain multiple recent commits for a file
-gut explain src/index.ts --history -n 5
+# Explain staged changes only
+gut explain --staged
 
 # Explain a specific commit
 gut explain abc123
@@ -143,8 +121,17 @@ gut explain HEAD
 gut explain 123
 gut explain #123
 
+# Explain a file's purpose and contents
+gut explain src/index.ts
+
+# Explain file's recent change history
+gut explain src/index.ts --history
+
+# Explain multiple recent commits for a file
+gut explain src/index.ts --history -n 5
+
 # Output as JSON
-gut explain src/index.ts --json
+gut explain --json
 ```
 
 **Project Context Support**: Create `.gut/explain.md` to provide project-specific context for better explanations.

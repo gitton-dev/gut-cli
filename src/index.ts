@@ -4,7 +4,6 @@ import { authCommand } from './commands/auth.js'
 import { aiCommitCommand } from './commands/ai-commit.js'
 import { aiPrCommand } from './commands/ai-pr.js'
 import { aiReviewCommand } from './commands/ai-review.js'
-import { aiDiffCommand } from './commands/ai-diff.js'
 import { aiMergeCommand } from './commands/ai-merge.js'
 import { changelogCommand } from './commands/changelog.js'
 import { aiExplainCommand } from './commands/ai-explain.js'
@@ -27,7 +26,6 @@ program.addCommand(authCommand)
 program.addCommand(aiCommitCommand)
 program.addCommand(aiPrCommand)
 program.addCommand(aiReviewCommand)
-program.addCommand(aiDiffCommand)
 program.addCommand(aiMergeCommand)
 program.addCommand(changelogCommand)
 program.addCommand(aiExplainCommand)
