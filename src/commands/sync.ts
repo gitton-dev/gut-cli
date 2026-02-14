@@ -6,7 +6,7 @@ import { simpleGit } from 'simple-git'
 export const syncCommand = new Command('sync')
   .description('Sync current branch with remote (fetch + rebase/merge)')
   .option('-m, --merge', 'Use merge instead of rebase')
-  .option('-a, --all', 'Sync all branches')
+  .option('--no-push', 'Skip push after syncing')
   .option('--stash', 'Auto-stash changes before sync')
   .option('-f, --force', 'Force sync even with uncommitted changes')
   .action(async (options) => {
@@ -103,11 +103,23 @@ export const syncCommand = new Command('sync')
 
       spinner.succeed(chalk.green('Synced successfully'))
 
-      if (ahead > 0) {
-        console.log(chalk.cyan(`  ↑ ${ahead} commit(s) ahead - run 'git push' to publish`))
-      }
       if (behind > 0) {
         console.log(chalk.yellow(`  ↓ ${behind} commit(s) behind`))
+      }
+
+      if (ahead > 0) {
+        if (options.push !== false) {
+          const pushSpinner = ora('Pushing to remote...').start()
+          try {
+            await git.push()
+            pushSpinner.succeed(chalk.green(`Pushed ${ahead} commit(s)`))
+          } catch (error) {
+            pushSpinner.fail('Push failed')
+            console.error(chalk.red(error instanceof Error ? error.message : 'Unknown error'))
+          }
+        } else {
+          console.log(chalk.cyan(`  ↑ ${ahead} commit(s) ahead`))
+        }
       }
 
       // Restore stash

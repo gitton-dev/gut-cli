@@ -193,20 +193,20 @@ gut branch -d "add user authentication"
 
 ### `gut sync`
 
-Sync current branch with remote (fetch + rebase).
+Sync current branch with remote (fetch + rebase + push).
 
 ```bash
-# Sync current branch (rebase by default)
+# Sync current branch (fetch + rebase + push)
 gut sync
-
-# Use merge instead of rebase
-gut sync --merge
 
 # Auto-stash changes before sync
 gut sync --stash
 
-# Force sync with uncommitted changes
-gut sync --force
+# Use merge instead of rebase
+gut sync --merge
+
+# Skip push
+gut sync --no-push
 ```
 
 ### `gut stash`
