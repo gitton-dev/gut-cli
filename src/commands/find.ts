@@ -19,8 +19,7 @@ function findProjectContext(repoRoot: string): string | null {
   return null
 }
 
-export const aiFindCommand = new Command('ai-find')
-  .alias('find')
+export const findCommand = new Command('find')
   .description('Find commits matching a vague description using AI')
   .argument('<query>', 'Description of the change you are looking for (e.g., "login feature added")')
   .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')

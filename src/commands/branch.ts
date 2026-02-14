@@ -32,8 +32,7 @@ function getIssueInfo(issueNumber: string): { title: string; body: string } | nu
   }
 }
 
-export const aiBranchCommand = new Command('ai-branch')
-  .alias('branch')
+export const branchCommand = new Command('branch')
   .description('Generate a branch name from issue number or description')
   .argument('[issue]', 'Issue number (e.g., 123 or #123)')
   .option('-d, --description <description>', 'Use description instead of issue')

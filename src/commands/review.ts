@@ -35,8 +35,7 @@ async function getPRDiff(prNumber: string): Promise<{ diff: string; prInfo: PRIn
   }
 }
 
-export const aiReviewCommand = new Command('ai-review')
-  .alias('review')
+export const reviewCommand = new Command('review')
   .description('Get an AI code review of your changes or a GitHub PR')
   .argument('[pr-number]', 'GitHub PR number to review')
   .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')

@@ -22,8 +22,7 @@ function findExplainContext(repoRoot: string): string | null {
   return null
 }
 
-export const aiExplainCommand = new Command('ai-explain')
-  .alias('explain')
+export const explainCommand = new Command('explain')
   .description('Get an AI-powered explanation of changes, commits, PRs, or files')
   .argument('[target]', 'Commit hash, PR number, PR URL, or file path (default: uncommitted changes)')
   .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')

@@ -26,8 +26,7 @@ function findPRTemplate(repoRoot: string): string | null {
   return null
 }
 
-export const aiPrCommand = new Command('ai-pr')
-  .alias('pr')
+export const prCommand = new Command('pr')
   .description('Generate a pull request title and description using AI')
   .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
   .option('-m, --model <model>', 'Model to use (provider-specific)')

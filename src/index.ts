@@ -1,14 +1,14 @@
 import { Command } from 'commander'
 import { cleanupCommand } from './commands/cleanup.js'
 import { authCommand } from './commands/auth.js'
-import { aiCommitCommand } from './commands/ai-commit.js'
-import { aiPrCommand } from './commands/ai-pr.js'
-import { aiReviewCommand } from './commands/ai-review.js'
-import { aiMergeCommand } from './commands/ai-merge.js'
+import { commitCommand } from './commands/commit.js'
+import { prCommand } from './commands/pr.js'
+import { reviewCommand } from './commands/review.js'
+import { mergeCommand } from './commands/merge.js'
 import { changelogCommand } from './commands/changelog.js'
-import { aiExplainCommand } from './commands/ai-explain.js'
-import { aiFindCommand } from './commands/ai-find.js'
-import { aiBranchCommand } from './commands/ai-branch.js'
+import { explainCommand } from './commands/explain.js'
+import { findCommand } from './commands/find.js'
+import { branchCommand } from './commands/branch.js'
 import { syncCommand } from './commands/sync.js'
 import { stashCommand } from './commands/stash.js'
 import { summaryCommand } from './commands/summary.js'
@@ -29,14 +29,14 @@ program.addCommand(cleanupCommand)
 program.addCommand(authCommand)
 
 // AI-powered commands
-program.addCommand(aiCommitCommand)
-program.addCommand(aiPrCommand)
-program.addCommand(aiReviewCommand)
-program.addCommand(aiMergeCommand)
+program.addCommand(commitCommand)
+program.addCommand(prCommand)
+program.addCommand(reviewCommand)
+program.addCommand(mergeCommand)
 program.addCommand(changelogCommand)
-program.addCommand(aiExplainCommand)
-program.addCommand(aiFindCommand)
-program.addCommand(aiBranchCommand)
+program.addCommand(explainCommand)
+program.addCommand(findCommand)
+program.addCommand(branchCommand)
 program.addCommand(syncCommand)
 program.addCommand(stashCommand)
 program.addCommand(summaryCommand)

@@ -25,8 +25,7 @@ function findCommitConvention(repoRoot: string): string | null {
   return null
 }
 
-export const aiCommitCommand = new Command('ai-commit')
-  .alias('commit')
+export const commitCommand = new Command('commit')
   .description('Generate a commit message using AI')
   .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
   .option('-m, --model <model>', 'Model to use (provider-specific)')

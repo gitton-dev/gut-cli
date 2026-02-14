@@ -22,8 +22,7 @@ function findMergeStrategy(repoRoot: string): string | null {
   return null
 }
 
-export const aiMergeCommand = new Command('ai-merge')
-  .alias('merge')
+export const mergeCommand = new Command('merge')
   .description('Merge a branch with AI-powered conflict resolution')
   .argument('<branch>', 'Branch to merge')
   .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
