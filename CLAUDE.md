@@ -21,6 +21,7 @@
     - `changelog` → `.gut/changelog.md`
     - `stash` → `.gut/stash.md`
     - `summary` → `.gut/summary.md`
+    - `gitignore` → `.gut/gitignore.md`
 
 ### Project Structure
 - Commands go in `src/commands/`

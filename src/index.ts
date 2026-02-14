@@ -16,6 +16,7 @@ import { summaryCommand } from './commands/summary.js'
 import { configCommand } from './commands/config.js'
 import { langCommand } from './commands/lang.js'
 import { initCommand } from './commands/init.js'
+import { gitignoreCommand } from './commands/gitignore.js'
 
 const program = new Command()
 
@@ -48,5 +49,6 @@ program.addCommand(summaryCommand)
 program.addCommand(configCommand)
 program.addCommand(langCommand)
 program.addCommand(initCommand)
+program.addCommand(gitignoreCommand)
 
 program.parse()

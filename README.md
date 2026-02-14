@@ -35,6 +35,7 @@ npm install -g gut-cli
 | `gut config` | Manage configuration (language, etc.) |
 | `gut lang` | Set or show output language |
 | `gut init` | Initialize .gut/ templates in your project |
+| `gut gitignore` | Generate .gitignore from codebase |
 
 ### `gut commit`
 
@@ -389,6 +390,32 @@ gut init --provider openai
 
 Templates are automatically translated to your configured language (set via `gut lang`).
 
+### `gut gitignore`
+
+Generate a .gitignore file by analyzing your project structure.
+
+```bash
+# Generate .gitignore (prompts before overwriting)
+gut gitignore
+
+# Auto-overwrite without confirmation
+gut gitignore --yes
+
+# Print to stdout instead of file
+gut gitignore --stdout
+
+# Use specific provider
+gut gitignore --provider openai
+```
+
+**How it works:**
+- Scans your project structure (files and directories)
+- Detects config files (package.json, Cargo.toml, go.mod, pyproject.toml, etc.)
+- Identifies the language/framework stack
+- Generates appropriate ignore patterns
+
+**Template Support**: Create `.gut/gitignore.md` to customize the generation prompt.
+
 ### `gut cleanup`
 
 Delete merged branches safely.
@@ -457,6 +484,7 @@ gut looks for template files in your repository's `.gut/` folder. Each template 
 | `.gut/changelog.md` | Changelog format |
 | `.gut/stash.md` | Stash name prompt |
 | `.gut/summary.md` | Work summary format |
+| `.gut/gitignore.md` | Gitignore generation prompt |
 | `.github/pull_request_template.md` | GitHub PR template (prioritized over `.gut/pr.md`) |
 
 ## Development

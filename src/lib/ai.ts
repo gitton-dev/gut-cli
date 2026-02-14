@@ -603,3 +603,29 @@ export async function resolveConflict(
 
   return result.object
 }
+
+export async function generateGitignore(
+  context: {
+    files: string
+    configFiles?: string
+    existingGitignore?: string
+  },
+  options: AIOptions,
+  template?: string
+): Promise<string> {
+  const model = await getModel(options)
+
+  const prompt = applyTemplate(template, 'gitignore', {
+    files: context.files,
+    configFiles: context.configFiles,
+    existingGitignore: context.existingGitignore
+  })
+
+  const result = await generateText({
+    model,
+    prompt,
+    maxTokens: 2000
+  })
+
+  return result.text.trim()
+}
