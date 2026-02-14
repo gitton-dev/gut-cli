@@ -10,124 +10,136 @@ npm install -g @gitton/gut
 
 ## Commands
 
-### AI-Powered Commands
+All AI commands support short aliases (without `ai-` prefix):
 
-#### `gut ai-commit`
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `gut ai-commit` | `gut commit` | Generate commit messages |
+| `gut ai-pr` | `gut pr` | Generate PR descriptions |
+| `gut ai-review` | `gut review` | Code review |
+| `gut ai-diff` | `gut diff` | Explain changes |
+| `gut ai-merge` | `gut merge` | Resolve merge conflicts |
+| `gut changelog` | - | Generate changelogs |
+
+### `gut commit`
 
 Generate commit messages using AI.
 
 ```bash
-# Generate commit message for staged changes
-gut ai-commit
+# Generate commit message (auto-stages if nothing staged)
+gut commit
 
 # Auto-commit with generated message
-gut ai-commit --commit
+gut commit --commit
 
-# Stage all and generate
-gut ai-commit --all
+# Force stage all changes
+gut commit --all
 
 # Use specific provider
-gut ai-commit --provider openai
+gut commit --provider openai
 ```
 
-#### `gut ai-pr`
+**Commit Convention Support**: If a convention file exists in your repo, gut will follow it:
+- `.gut/commit-convention.md`
+- `.github/commit-convention.md`
+- `.commit-convention.md`
+- `.gitmessage`
+
+### `gut pr`
 
 Generate pull request title and description using AI.
 
 ```bash
 # Generate PR description
-gut ai-pr
+gut pr
 
 # Specify base branch
-gut ai-pr --base develop
+gut pr --base develop
 
 # Create PR directly (requires gh CLI)
-gut ai-pr --create
+gut pr --create
 
 # Copy to clipboard
-gut ai-pr --copy
+gut pr --copy
 ```
 
-Supports PR templates: automatically uses `.github/pull_request_template.md` if present.
+**PR Template Support**: Automatically uses `.github/pull_request_template.md` if present.
 
-#### `gut ai-review`
+### `gut review`
 
-Get AI code review of your changes.
+Get AI code review of your changes or GitHub PRs.
 
 ```bash
 # Review all uncommitted changes
-gut ai-review
+gut review
 
 # Review staged changes only
-gut ai-review --staged
+gut review --staged
 
 # Review specific commit
-gut ai-review --commit abc123
+gut review --commit abc123
+
+# Review a GitHub PR by number
+gut review 123
 
 # Output as JSON
-gut ai-review --json
+gut review --json
 ```
 
-#### `gut ai-diff`
+### `gut diff`
 
 Get an AI-powered explanation of your changes.
 
 ```bash
 # Explain all uncommitted changes
-gut ai-diff
+gut diff
 
 # Explain staged changes only
-gut ai-diff --staged
+gut diff --staged
 
 # Explain specific commit
-gut ai-diff --commit abc123
+gut diff --commit abc123
 
 # Output as JSON
-gut ai-diff --json
+gut diff --json
 ```
 
-### Authentication
-
-#### `gut auth`
-
-Manage API keys for AI providers.
-
-```bash
-# Save API key to system keychain
-gut auth login --provider gemini
-
-# Check which providers are configured
-gut auth status
-
-# Remove API key
-gut auth logout --provider gemini
-```
-
-Supported providers: `gemini`, `openai`, `anthropic`
-
-API keys can also be set via environment variables:
-- `GUT_GEMINI_API_KEY` or `GEMINI_API_KEY`
-- `GUT_OPENAI_API_KEY` or `OPENAI_API_KEY`
-- `GUT_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY`
-
-#### `gut ai-merge`
+### `gut merge`
 
 Merge branches with AI-powered conflict resolution.
 
 ```bash
 # Merge a branch with AI conflict resolution
-gut ai-merge feature/login
+gut merge feature/login
 
 # Use specific provider
-gut ai-merge feature/login --provider openai
+gut merge feature/login --provider openai
 
 # Don't auto-commit after resolving
-gut ai-merge feature/login --no-commit
+gut merge feature/login --no-commit
 ```
 
-### Branch Management
+### `gut changelog`
 
-#### `gut cleanup`
+Generate a changelog from commits.
+
+```bash
+# Generate changelog for last 10 commits
+gut changelog
+
+# Generate changelog between refs
+gut changelog v1.0.0 v1.1.0
+
+# Generate changelog since a tag
+gut changelog --tag v1.0.0
+
+# Output as JSON
+gut changelog --json
+```
+
+**Changelog Template Support**: If `CHANGELOG.md` exists, gut will match its style.
+
+### `gut cleanup`
 
 Delete merged branches safely.
 
@@ -144,6 +156,38 @@ gut cleanup --remote
 # Skip confirmation prompt
 gut cleanup --force
 ```
+
+### `gut auth`
+
+Manage API keys for AI providers.
+
+```bash
+# Save API key to system keychain
+gut auth login --provider gemini
+
+# Check which providers are configured
+gut auth status
+
+# Remove API key
+gut auth logout --provider gemini
+```
+
+**Supported providers**: `gemini` (default), `openai`, `anthropic`
+
+API keys can also be set via environment variables:
+- `GUT_GEMINI_API_KEY` or `GEMINI_API_KEY`
+- `GUT_OPENAI_API_KEY` or `OPENAI_API_KEY`
+- `GUT_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY`
+
+## Project Configuration
+
+gut looks for these configuration files in your repository:
+
+| File | Purpose |
+|------|---------|
+| `.gut/commit-convention.md` | Custom commit message rules |
+| `.github/pull_request_template.md` | PR description template |
+| `CHANGELOG.md` | Changelog style reference |
 
 ## Development
 

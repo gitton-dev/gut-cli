@@ -44,21 +44,32 @@ async function getModel(options: AIOptions) {
 
 export async function generateCommitMessage(
   diff: string,
-  options: AIOptions
+  options: AIOptions,
+  convention?: string
 ): Promise<string> {
   const model = await getModel(options)
 
-  const prompt = `You are an expert at writing git commit messages following the Conventional Commits specification.
+  const conventionInstructions = convention
+    ? `
+IMPORTANT: Follow this project's commit message convention:
 
-Analyze the following git diff and generate a concise, meaningful commit message.
-
+--- CONVENTION START ---
+${convention}
+--- CONVENTION END ---
+`
+    : `
 Rules:
 - Use format: <type>(<scope>): <description>
 - Types: feat, fix, docs, style, refactor, perf, test, chore, build, ci
 - Scope is optional but helpful
 - Description should be lowercase, imperative mood, no period at end
 - Keep the first line under 72 characters
-- If changes are complex, add a blank line and bullet points for details
+- If changes are complex, add a blank line and bullet points for details`
+
+  const prompt = `You are an expert at writing git commit messages.
+
+Analyze the following git diff and generate a concise, meaningful commit message.
+${conventionInstructions}
 
 Git diff:
 \`\`\`
@@ -229,6 +240,78 @@ ${diff.slice(0, 10000)}
 \`\`\`
 
 Be constructive and specific. Include line numbers when possible.`
+  })
+
+  return result.object
+}
+
+const ChangelogSchema = z.object({
+  version: z.string().optional().describe('Version string if detected'),
+  date: z.string().describe('Release date in YYYY-MM-DD format'),
+  sections: z.array(
+    z.object({
+      type: z.string().describe('Section type (Added, Changed, Fixed, Removed, etc.)'),
+      items: z.array(z.string()).describe('List of changes in this section')
+    })
+  ),
+  summary: z.string().optional().describe('Brief summary of this release')
+})
+
+export type Changelog = z.infer<typeof ChangelogSchema>
+
+export async function generateChangelog(
+  context: {
+    commits: Array<{ hash: string; message: string; author: string; date: string }>
+    diff: string
+    fromRef: string
+    toRef: string
+    template?: string
+  },
+  options: AIOptions
+): Promise<Changelog> {
+  const model = await getModel(options)
+
+  const templateInstructions = context.template
+    ? `
+IMPORTANT: Follow this project's changelog format:
+
+--- CHANGELOG TEMPLATE START ---
+${context.template.slice(0, 2000)}
+--- CHANGELOG TEMPLATE END ---
+
+Match the style, sections, and formatting of the existing changelog.`
+    : `
+Use Keep a Changelog format (https://keepachangelog.com/):
+- Group changes by: Added, Changed, Deprecated, Removed, Fixed, Security
+- Each item should be a concise description of the change
+- Use past tense`
+
+  const commitList = context.commits
+    .map((c) => `- ${c.hash.slice(0, 7)} ${c.message} (${c.author})`)
+    .join('\n')
+
+  const result = await generateObject({
+    model,
+    schema: ChangelogSchema,
+    prompt: `You are an expert at writing release notes and changelogs.
+
+Generate a changelog entry for changes from ${context.fromRef} to ${context.toRef}.
+
+Commits:
+${commitList}
+
+Diff summary (truncated):
+\`\`\`
+${context.diff.slice(0, 8000)}
+\`\`\`
+${templateInstructions}
+
+Focus on:
+- User-facing changes and improvements
+- Bug fixes and their impact
+- Breaking changes (highlight these)
+- Group related changes together
+- Write for end users, not developers (unless it's a library)`
   })
 
   return result.object

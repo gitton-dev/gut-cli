@@ -2,8 +2,28 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
+import { existsSync, readFileSync } from 'fs'
+import { join } from 'path'
 import { generateCommitMessage } from '../lib/ai.js'
 import { Provider } from '../lib/credentials.js'
+
+const CONVENTION_PATHS = [
+  '.gut/commit-convention.md',
+  '.github/commit-convention.md',
+  '.commit-convention.md',
+  'docs/commit-convention.md',
+  '.gitmessage'
+]
+
+function findCommitConvention(repoRoot: string): string | null {
+  for (const conventionPath of CONVENTION_PATHS) {
+    const fullPath = join(repoRoot, conventionPath)
+    if (existsSync(fullPath)) {
+      return readFileSync(fullPath, 'utf-8')
+    }
+  }
+  return null
+}
 
 export const aiCommitCommand = new Command('ai-commit')
   .alias('commit')
@@ -14,6 +34,7 @@ export const aiCommitCommand = new Command('ai-commit')
   .option('-a, --all', 'Force stage all changes (default: auto-stage if nothing staged)')
   .action(async (options) => {
     const git = simpleGit()
+    const repoRoot = await git.revparse(['--show-toplevel']).catch(() => process.cwd())
 
     // Check if we're in a git repository
     const isRepo = await git.checkIsRepo()
@@ -44,13 +65,20 @@ export const aiCommitCommand = new Command('ai-commit')
       diff = await git.diff(['--cached'])
     }
 
+    // Find commit convention
+    const convention = findCommitConvention(repoRoot.trim())
+    if (convention) {
+      console.log(chalk.gray('Using commit convention from project...'))
+    }
+
     const spinner = ora('Generating commit message...').start()
 
     try {
-      const message = await generateCommitMessage(diff, {
-        provider,
-        model: options.model
-      })
+      const message = await generateCommitMessage(
+        diff,
+        { provider, model: options.model },
+        convention || undefined
+      )
 
       spinner.stop()
 
