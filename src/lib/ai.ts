@@ -4,6 +4,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
 import { getApiKey, Provider } from './credentials.js'
+import { getLanguage, getLanguageInstruction } from './config.js'
 
 export interface AIOptions {
   provider: Provider
@@ -66,6 +67,8 @@ Rules:
 - Keep the first line under 72 characters
 - If changes are complex, add a blank line and bullet points for details`
 
+  const langInstruction = getLanguageInstruction(getLanguage())
+
   const prompt = `You are an expert at writing git commit messages.
 
 Analyze the following git diff and generate a concise, meaningful commit message.
@@ -76,7 +79,7 @@ Git diff:
 ${diff.slice(0, 8000)}
 \`\`\`
 
-Respond with ONLY the commit message, nothing else.`
+Respond with ONLY the commit message, nothing else.${langInstruction}`
 
   const result = await generateText({
     model,
@@ -116,6 +119,8 @@ Rules for description:
   - ## Changes section listing key modifications
   - ## Test Plan section (suggest what to test)`
 
+  const langInstruction = getLanguageInstruction(getLanguage())
+
   const prompt = `You are an expert at writing pull request descriptions.
 
 Generate a clear and informative PR title and description based on the following information.
@@ -138,7 +143,7 @@ Respond in JSON format:
 {
   "title": "...",
   "body": "..."
-}`
+}${langInstruction}`
 
   const result = await generateText({
     model,
@@ -179,6 +184,8 @@ export async function generateCodeReview(
 ): Promise<CodeReview> {
   const model = await getModel(options)
 
+  const langInstruction = getLanguageInstruction(getLanguage())
+
   const result = await generateObject({
     model,
     schema: CodeReviewSchema,
@@ -196,7 +203,7 @@ Git diff:
 ${diff.slice(0, 10000)}
 \`\`\`
 
-Be constructive and specific. Include line numbers when possible.`
+Be constructive and specific. Include line numbers when possible.${langInstruction}`
   })
 
   return result.object
@@ -247,6 +254,8 @@ Use Keep a Changelog format (https://keepachangelog.com/):
     .map((c) => `- ${c.hash.slice(0, 7)} ${c.message} (${c.author})`)
     .join('\n')
 
+  const langInstruction = getLanguageInstruction(getLanguage())
+
   const result = await generateObject({
     model,
     schema: ChangelogSchema,
@@ -268,7 +277,7 @@ Focus on:
 - Bug fixes and their impact
 - Breaking changes (highlight these)
 - Group related changes together
-- Write for end users, not developers (unless it's a library)`
+- Write for end users, not developers (unless it's a library)${langInstruction}`
   })
 
   return result.object
@@ -329,6 +338,8 @@ ${projectContext.slice(0, 4000)}
 `
     : ''
 
+  const langInstruction = getLanguageInstruction(getLanguage())
+
   // Handle file content explanation (different prompt)
   if (context.type === 'file-content') {
     const result = await generateObject({
@@ -352,7 +363,7 @@ Focus on:
 - Dependencies and what it interacts with
 - Any important patterns or architecture decisions
 
-Explain in a way that helps someone quickly understand this file's purpose and how it fits into the larger codebase.`
+Explain in a way that helps someone quickly understand this file's purpose and how it fits into the larger codebase.${langInstruction}`
     })
     return result.object
   }
@@ -414,7 +425,7 @@ Focus on:
 - The broader context and purpose
 - Any important implications or side effects
 
-Explain in a way that helps someone understand not just the "what" but the "why" behind these changes.`
+Explain in a way that helps someone understand not just the "what" but the "why" behind these changes.${langInstruction}`
   })
 
   return result.object
@@ -472,6 +483,8 @@ ${projectContext.slice(0, 3000)}
     .map((c) => `${c.hash.slice(0, 7)} | ${c.author} | ${c.date.split('T')[0]} | ${c.message.split('\n')[0]}`)
     .join('\n')
 
+  const langInstruction = getLanguageInstruction(getLanguage())
+
   const result = await generateObject({
     model,
     schema: CommitSearchSchema,
@@ -494,7 +507,7 @@ Only include commits that actually match the query - if none match well, return 
 
 For each match, provide:
 - The commit hash (first 7 characters are fine)
-- A brief reason explaining why this commit matches the query`
+- A brief reason explaining why this commit matches the query${langInstruction}`
   })
 
   // Enrich results with full commit data

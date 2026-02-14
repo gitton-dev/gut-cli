@@ -11,6 +11,8 @@ import { aiFindCommand } from './commands/ai-find.js'
 import { aiBranchCommand } from './commands/ai-branch.js'
 import { syncCommand } from './commands/sync.js'
 import { stashCommand } from './commands/stash.js'
+import { configCommand } from './commands/config.js'
+import { langCommand } from './commands/lang.js'
 
 const program = new Command()
 
@@ -36,5 +38,9 @@ program.addCommand(aiFindCommand)
 program.addCommand(aiBranchCommand)
 program.addCommand(syncCommand)
 program.addCommand(stashCommand)
+
+// Configuration
+program.addCommand(configCommand)
+program.addCommand(langCommand)
 
 program.parse()

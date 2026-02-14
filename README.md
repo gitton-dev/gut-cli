@@ -24,6 +24,8 @@ All AI commands support short aliases (without `ai-` prefix):
 | `gut changelog` | - | Generate changelogs |
 | `gut sync` | - | Sync with remote (fetch + rebase/merge) |
 | `gut stash` | - | Stash with AI-generated names |
+| `gut config` | - | Manage configuration (language, etc.) |
+| `gut lang` | - | Set or show output language |
 
 ### `gut commit`
 
@@ -258,6 +260,49 @@ gut changelog --json
 ```
 
 **Changelog Template Support**: If `CHANGELOG.md` exists, gut will match its style.
+
+### `gut lang`
+
+Set or show AI output language (shortcut for `gut config set lang`).
+
+```bash
+# Show current language
+gut lang
+
+# Set to Japanese
+gut lang ja
+
+# Set to English
+gut lang en
+
+# Set for current repository only
+gut lang en --local
+```
+
+### `gut config`
+
+Manage gut configuration settings.
+
+```bash
+# List all settings
+gut config list
+
+# Set language to Japanese (global)
+gut config set lang ja
+
+# Set language for current repository only
+gut config set lang en --local
+
+# Get current language
+gut config get lang
+```
+
+**Available settings:**
+- `lang` - Output language for AI responses (`en`, `ja`)
+
+**Configuration precedence:**
+1. Local: `.gut/config.json` (per-repository)
+2. Global: `~/.config/gut/config.json`
 
 ### `gut cleanup`
 
