@@ -2,22 +2,8 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
-import { existsSync, readFileSync } from 'fs'
-import { join } from 'path'
-import { searchCommits, CommitSearchResult } from '../lib/ai.js'
+import { searchCommits, CommitSearchResult, findTemplate } from '../lib/ai.js'
 import { Provider } from '../lib/credentials.js'
-
-const CONTEXT_PATHS = ['.gut/find.md']
-
-function findProjectContext(repoRoot: string): string | null {
-  for (const contextPath of CONTEXT_PATHS) {
-    const fullPath = join(repoRoot, contextPath)
-    if (existsSync(fullPath)) {
-      return readFileSync(fullPath, 'utf-8')
-    }
-  }
-  return null
-}
 
 export const findCommand = new Command('find')
   .description('Find commits matching a vague description using AI')
@@ -81,19 +67,16 @@ export const findCommand = new Command('find')
         date: c.date
       }))
 
-      // Find project context
-      const projectContext = findProjectContext(repoRoot.trim())
+      // Find template
+      const template = findTemplate(repoRoot.trim(), 'find')
 
       // Search with AI
       const results = await searchCommits(
         query,
         commits,
-        {
-          provider,
-          model: options.model
-        },
+        { provider, model: options.model },
         parseInt(options.maxResults, 10),
-        projectContext || undefined
+        template || undefined
       )
 
       spinner.stop()

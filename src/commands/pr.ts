@@ -4,11 +4,11 @@ import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { generatePRDescription } from '../lib/ai.js'
+import { generatePRDescription, findTemplate } from '../lib/ai.js'
 import { Provider } from '../lib/credentials.js'
 
-const PR_TEMPLATE_PATHS = [
-  '.gut/pr-template.md',
+// GitHub's conventional PR template paths (prioritized)
+const GITHUB_PR_TEMPLATE_PATHS = [
   '.github/pull_request_template.md',
   '.github/PULL_REQUEST_TEMPLATE.md',
   'pull_request_template.md',
@@ -17,13 +17,15 @@ const PR_TEMPLATE_PATHS = [
 ]
 
 function findPRTemplate(repoRoot: string): string | null {
-  for (const templatePath of PR_TEMPLATE_PATHS) {
+  // First, check for GitHub's PR template
+  for (const templatePath of GITHUB_PR_TEMPLATE_PATHS) {
     const fullPath = join(repoRoot, templatePath)
     if (existsSync(fullPath)) {
       return readFileSync(fullPath, 'utf-8')
     }
   }
-  return null
+  // Fall back to .gut/pr.md
+  return findTemplate(repoRoot, 'pr')
 }
 
 export const prCommand = new Command('pr')
@@ -98,13 +100,10 @@ export const prCommand = new Command('pr')
           baseBranch,
           currentBranch,
           commits,
-          diff,
-          template: template || undefined
+          diff
         },
-        {
-          provider,
-          model: options.model
-        }
+        { provider, model: options.model },
+        template || undefined
       )
 
       spinner.stop()

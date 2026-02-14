@@ -4,23 +4,8 @@ import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { execSync } from 'child_process'
 import { existsSync, readFileSync } from 'fs'
-import { join } from 'path'
-import { generateExplanation } from '../lib/ai.js'
+import { generateExplanation, findTemplate } from '../lib/ai.js'
 import { Provider } from '../lib/credentials.js'
-
-const CONTEXT_PATHS = [
-  '.gut/explain.md'
-]
-
-function findExplainContext(repoRoot: string): string | null {
-  for (const contextPath of CONTEXT_PATHS) {
-    const fullPath = join(repoRoot, contextPath)
-    if (existsSync(fullPath)) {
-      return readFileSync(fullPath, 'utf-8')
-    }
-  }
-  return null
-}
 
 export const explainCommand = new Command('explain')
   .description('Get an AI-powered explanation of changes, commits, PRs, or files')
@@ -72,18 +57,21 @@ export const explainCommand = new Command('explain')
         }
       }
 
-      // Find project context
-      const projectContext = findExplainContext(repoRoot.trim())
-      if (projectContext) {
-        console.log(chalk.gray('Using project context...'))
+      // Find template
+      const isFileContent = context.type === 'file-content'
+      const templateName = isFileContent ? 'explain-file' : 'explain'
+      const template = findTemplate(repoRoot.trim(), templateName)
+      if (template) {
+        console.log(chalk.gray('Using template from project...'))
       }
 
       spinner.text = 'AI is generating explanation...'
 
-      const explanation = await generateExplanation(context, {
-        provider,
-        model: options.model
-      }, projectContext || undefined)
+      const explanation = await generateExplanation(
+        context,
+        { provider, model: options.model },
+        template || undefined
+      )
 
       spinner.stop()
 

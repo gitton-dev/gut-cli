@@ -27,6 +27,7 @@ npm install -g gut-cli
 | `gut explain` | Explain changes, commits, PRs, or files |
 | `gut find` | Find commits by vague description |
 | `gut branch` | Generate branch names from description |
+| `gut checkout` | Generate branch name from diff and checkout |
 | `gut changelog` | Generate changelogs |
 | `gut sync` | Sync with remote (fetch + rebase/merge) |
 | `gut stash` | Stash with AI-generated names |
@@ -52,11 +53,7 @@ gut commit --all
 gut commit --provider openai
 ```
 
-**Commit Convention Support**: If a convention file exists in your repo, gut will follow it:
-- `.gut/commit-convention.md`
-- `.github/commit-convention.md`
-- `.commit-convention.md`
-- `.gitmessage`
+**Template Support**: Create `.gut/commit.md` to customize the commit message prompt.
 
 ### `gut pr`
 
@@ -76,7 +73,7 @@ gut pr --create
 gut pr --copy
 ```
 
-**PR Template Support**: Automatically uses `.github/pull_request_template.md` if present.
+**Template Support**: Automatically uses GitHub's `.github/pull_request_template.md` if present, or falls back to `.gut/pr.md`.
 
 ### `gut review`
 
@@ -198,7 +195,27 @@ gut branch 123 --type fix
 gut branch -d "add user authentication"
 ```
 
-**Branch Convention Support**: Create `.gut/branch-convention.md` for custom naming rules.
+**Template Support**: Create `.gut/branch.md` for custom naming rules.
+
+### `gut checkout`
+
+Generate a branch name from current diff and checkout.
+
+```bash
+# Generate branch name from uncommitted changes
+gut checkout
+
+# Auto-checkout without confirmation
+gut checkout --yes
+
+# Use only staged changes
+gut checkout --staged
+
+# Use specific provider
+gut checkout --provider openai
+```
+
+**Template Support**: Create `.gut/checkout.md` to customize the prompt.
 
 ### `gut sync`
 
@@ -306,7 +323,7 @@ gut changelog --tag v1.0.0
 gut changelog --json
 ```
 
-**Changelog Template Support**: If `CHANGELOG.md` exists, gut will match its style.
+**Template Support**: Create `.gut/changelog.md` to customize the changelog format.
 
 ### `gut lang`
 
@@ -403,19 +420,23 @@ Keys are never stored in plain text files or configuration files. When you run `
 
 ## Project Configuration
 
-gut looks for these configuration files in your repository:
+gut looks for template files in your repository's `.gut/` folder. Each template uses `{{variable}}` syntax for dynamic content.
 
 | File | Purpose |
 |------|---------|
-| `.gut/commit-convention.md` | Custom commit message rules |
-| `.gut/pr-template.md` | PR description template |
-| `.gut/changelog-template.md` | Changelog style template |
-| `.gut/merge-strategy.md` | Merge conflict resolution rules |
-| `.gut/explain.md` | Project context for explanations |
-| `.gut/find.md` | Project context for commit search |
-| `.gut/branch-convention.md` | Custom branch naming rules |
-| `.github/pull_request_template.md` | PR template (fallback) |
-| `CHANGELOG.md` | Changelog style (fallback) |
+| `.gut/commit.md` | Commit message prompt |
+| `.gut/pr.md` | PR description prompt |
+| `.gut/branch.md` | Branch naming rules |
+| `.gut/checkout.md` | Checkout branch name prompt |
+| `.gut/merge.md` | Merge conflict resolution rules |
+| `.gut/review.md` | Code review criteria |
+| `.gut/explain.md` | Explanation context |
+| `.gut/explain-file.md` | File explanation context |
+| `.gut/find.md` | Commit search context |
+| `.gut/changelog.md` | Changelog format |
+| `.gut/stash.md` | Stash name prompt |
+| `.gut/summary.md` | Work summary format |
+| `.github/pull_request_template.md` | GitHub PR template (prioritized over `.gut/pr.md`) |
 
 ## Development
 

@@ -3,7 +3,7 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { execSync } from 'child_process'
-import { generateCodeReview, CodeReview } from '../lib/ai.js'
+import { generateCodeReview, CodeReview, findTemplate } from '../lib/ai.js'
 import { Provider } from '../lib/credentials.js'
 
 interface PRInfo {
@@ -91,10 +91,14 @@ export const reviewCommand = new Command('review')
 
       spinner.text = 'AI is reviewing your code...'
 
-      const review = await generateCodeReview(diff, {
-        provider,
-        model: options.model
-      })
+      const repoRoot = await git.revparse(['--show-toplevel']).catch(() => process.cwd())
+      const template = findTemplate(repoRoot.trim(), 'review')
+
+      const review = await generateCodeReview(
+        diff,
+        { provider, model: options.model },
+        template || undefined
+      )
 
       spinner.stop()
 

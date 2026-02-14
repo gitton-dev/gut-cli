@@ -3,12 +3,84 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { z } from 'zod'
+import { existsSync, readFileSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 import { getApiKey, Provider } from './credentials.js'
 import { getLanguage, getLanguageInstruction } from './config.js'
 
 export interface AIOptions {
   provider: Provider
   model?: string
+}
+
+// Get the directory where gut is installed (for reading default templates)
+// After bundling with tsup, the output is dist/index.js, so we go up one level
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+const GUT_ROOT = join(__dirname, '..')
+
+/**
+ * Load a default template from gut's own .gut/ folder
+ */
+function loadTemplate(name: string): string {
+  const templatePath = join(GUT_ROOT, '.gut', `${name}.md`)
+  if (existsSync(templatePath)) {
+    return readFileSync(templatePath, 'utf-8')
+  }
+  throw new Error(`Template not found: ${templatePath}`)
+}
+
+/**
+ * Find a user's project template from .gut/ folder
+ * @param repoRoot - The root directory of the user's repository
+ * @param templateName - Name of the template file (without .md extension)
+ * @returns Template content if found, null otherwise
+ */
+export function findTemplate(repoRoot: string, templateName: string): string | null {
+  const templatePath = join(repoRoot, '.gut', `${templateName}.md`)
+  if (existsSync(templatePath)) {
+    return readFileSync(templatePath, 'utf-8')
+  }
+  return null
+}
+
+/**
+ * Replace template variables in the format {{variable}}
+ * Also supports conditional sections: {{#var}}content{{/var}} (rendered if var exists)
+ *
+ * @param userTemplate - User-provided template string or null/undefined
+ * @param templateName - Name of the default template file in .gut/ (without .md extension)
+ * @param variables - Variables to replace in the template
+ * @returns Processed template with language instruction appended if using default
+ */
+function applyTemplate(
+  userTemplate: string | null | undefined,
+  templateName: string,
+  variables: Record<string, string | undefined>
+): string {
+  const langInstruction = getLanguageInstruction(getLanguage())
+  const isUserTemplate = !!userTemplate
+
+  // Priority: user template > .gut/ template
+  let result = userTemplate || loadTemplate(templateName)
+
+  // Handle conditional sections: {{#var}}content{{/var}}
+  result = result.replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (_, key, content) => {
+    return variables[key] ? content : ''
+  })
+
+  // Replace simple variables: {{var}}
+  for (const [key, value] of Object.entries(variables)) {
+    result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value || '')
+  }
+
+  // Append language instruction only when NOT using user's custom template
+  if (!isUserTemplate) {
+    result += langInstruction
+  }
+
+  return result
 }
 
 const DEFAULT_MODELS: Record<Provider, string> = {
@@ -46,40 +118,13 @@ async function getModel(options: AIOptions) {
 export async function generateCommitMessage(
   diff: string,
   options: AIOptions,
-  convention?: string
+  template?: string
 ): Promise<string> {
   const model = await getModel(options)
 
-  const conventionInstructions = convention
-    ? `
-IMPORTANT: Follow this project's commit message convention:
-
---- CONVENTION START ---
-${convention}
---- CONVENTION END ---
-`
-    : `
-Rules:
-- Use format: <type>(<scope>): <description>
-- Types: feat, fix, docs, style, refactor, perf, test, chore, build, ci
-- Scope is optional but helpful
-- Description should be lowercase, imperative mood, no period at end
-- Keep the first line under 72 characters
-- If changes are complex, add a blank line and bullet points for details`
-
-  const langInstruction = getLanguageInstruction(getLanguage())
-
-  const prompt = `You are an expert at writing git commit messages.
-
-Analyze the following git diff and generate a concise, meaningful commit message.
-${conventionInstructions}
-
-Git diff:
-\`\`\`
-${diff.slice(0, 8000)}
-\`\`\`
-
-Respond with ONLY the commit message, nothing else.${langInstruction}`
+  const prompt = applyTemplate(template, 'commit', {
+    diff: diff.slice(0, 8000)
+  })
 
   const result = await generateText({
     model,
@@ -96,54 +141,18 @@ export async function generatePRDescription(
     currentBranch: string
     commits: string[]
     diff: string
-    template?: string
   },
-  options: AIOptions
+  options: AIOptions,
+  template?: string
 ): Promise<{ title: string; body: string }> {
   const model = await getModel(options)
 
-  const templateInstructions = context.template
-    ? `
-IMPORTANT: The repository has a PR template. You MUST fill in this template structure:
-
---- PR TEMPLATE START ---
-${context.template}
---- PR TEMPLATE END ---
-
-Fill in each section of the template based on the changes. Keep the template structure intact.
-Replace placeholder text and fill in the sections appropriately.`
-    : `
-Rules for description:
-- Description should have:
-  - ## Summary section with 2-3 bullet points
-  - ## Changes section listing key modifications
-  - ## Test Plan section (suggest what to test)`
-
-  const langInstruction = getLanguageInstruction(getLanguage())
-
-  const prompt = `You are an expert at writing pull request descriptions.
-
-Generate a clear and informative PR title and description based on the following information.
-
-Branch: ${context.currentBranch} -> ${context.baseBranch}
-
-Commits:
-${context.commits.map((c) => `- ${c}`).join('\n')}
-
-Diff summary (truncated):
-\`\`\`
-${context.diff.slice(0, 6000)}
-\`\`\`
-${templateInstructions}
-
-Rules for title:
-- Title should be concise (under 72 chars), start with a verb
-
-Respond in JSON format:
-{
-  "title": "...",
-  "body": "..."
-}${langInstruction}`
+  const prompt = applyTemplate(template, 'pr', {
+    baseBranch: context.baseBranch,
+    currentBranch: context.currentBranch,
+    commits: context.commits.map((c) => `- ${c}`).join('\n'),
+    diff: context.diff.slice(0, 6000)
+  })
 
   const result = await generateText({
     model,
@@ -180,30 +189,19 @@ export type CodeReview = z.infer<typeof CodeReviewSchema>
 
 export async function generateCodeReview(
   diff: string,
-  options: AIOptions
+  options: AIOptions,
+  template?: string
 ): Promise<CodeReview> {
   const model = await getModel(options)
 
-  const langInstruction = getLanguageInstruction(getLanguage())
+  const prompt = applyTemplate(template, 'review', {
+    diff: diff.slice(0, 10000)
+  })
 
   const result = await generateObject({
     model,
     schema: CodeReviewSchema,
-    prompt: `You are an expert code reviewer. Analyze the following git diff and provide a structured review.
-
-Focus on:
-- Bugs and potential issues
-- Security vulnerabilities
-- Performance concerns
-- Code style and best practices
-- Suggestions for improvement
-
-Git diff:
-\`\`\`
-${diff.slice(0, 10000)}
-\`\`\`
-
-Be constructive and specific. Include line numbers when possible.${langInstruction}`
+    prompt
   })
 
   return result.object
@@ -229,55 +227,27 @@ export async function generateChangelog(
     diff: string
     fromRef: string
     toRef: string
-    template?: string
   },
-  options: AIOptions
+  options: AIOptions,
+  template?: string
 ): Promise<Changelog> {
   const model = await getModel(options)
-
-  const templateInstructions = context.template
-    ? `
-IMPORTANT: Follow this project's changelog format:
-
---- CHANGELOG TEMPLATE START ---
-${context.template.slice(0, 2000)}
---- CHANGELOG TEMPLATE END ---
-
-Match the style, sections, and formatting of the existing changelog.`
-    : `
-Use Keep a Changelog format (https://keepachangelog.com/):
-- Group changes by: Added, Changed, Deprecated, Removed, Fixed, Security
-- Each item should be a concise description of the change
-- Use past tense`
 
   const commitList = context.commits
     .map((c) => `- ${c.hash.slice(0, 7)} ${c.message} (${c.author})`)
     .join('\n')
 
-  const langInstruction = getLanguageInstruction(getLanguage())
+  const prompt = applyTemplate(template, 'changelog', {
+    fromRef: context.fromRef,
+    toRef: context.toRef,
+    commits: commitList,
+    diff: context.diff.slice(0, 8000)
+  })
 
   const result = await generateObject({
     model,
     schema: ChangelogSchema,
-    prompt: `You are an expert at writing release notes and changelogs.
-
-Generate a changelog entry for changes from ${context.fromRef} to ${context.toRef}.
-
-Commits:
-${commitList}
-
-Diff summary (truncated):
-\`\`\`
-${context.diff.slice(0, 8000)}
-\`\`\`
-${templateInstructions}
-
-Focus on:
-- User-facing changes and improvements
-- Bug fixes and their impact
-- Breaking changes (highlight these)
-- Group related changes together
-- Write for end users, not developers (unless it's a library)${langInstruction}`
+    prompt
   })
 
   return result.object
@@ -324,108 +294,64 @@ export async function generateExplanation(
     }
   },
   options: AIOptions,
-  projectContext?: string
+  template?: string
 ): Promise<Explanation> {
   const model = await getModel(options)
 
-  const projectContextSection = projectContext
-    ? `
-IMPORTANT: Use this project context to provide more accurate explanations:
-
---- PROJECT CONTEXT START ---
-${projectContext.slice(0, 4000)}
---- PROJECT CONTEXT END ---
-`
-    : ''
-
-  const langInstruction = getLanguageInstruction(getLanguage())
-
-  // Handle file content explanation (different prompt)
+  // Handle file content explanation
   if (context.type === 'file-content') {
+    const prompt = applyTemplate(template, 'explain-file', {
+      filePath: context.metadata.filePath || '',
+      content: context.content?.slice(0, 15000) || ''
+    })
+
     const result = await generateObject({
       model,
       schema: ExplanationSchema,
-      prompt: `You are an expert at explaining code in a clear and insightful way.
-${projectContextSection}
-Analyze the following file and explain what it does, its purpose, and its role in a project.
-
-File: ${context.metadata.filePath}
-
-Content:
-\`\`\`
-${context.content?.slice(0, 15000)}
-\`\`\`
-
-Focus on:
-- What this file does (main functionality)
-- Its purpose and role in the codebase
-- Key functions, classes, or components it defines
-- Dependencies and what it interacts with
-- Any important patterns or architecture decisions
-
-Explain in a way that helps someone quickly understand this file's purpose and how it fits into the larger codebase.${langInstruction}`
+      prompt
     })
     return result.object
   }
 
-  // Handle diff-based explanations (commits, PRs, file history, uncommitted, staged)
+  // Build context info for diff-based explanations
   let contextInfo: string
   let targetType: string
 
   if (context.type === 'pr') {
-    contextInfo = `
-Pull Request: #${context.metadata.prNumber}
+    contextInfo = `Pull Request: #${context.metadata.prNumber}
 Title: ${context.title}
 Branch: ${context.metadata.headBranch} -> ${context.metadata.baseBranch}
 Commits:
-${context.metadata.commits?.map((c) => `- ${c}`).join('\n') || 'N/A'}
-`
+${context.metadata.commits?.map((c) => `- ${c}`).join('\n') || 'N/A'}`
     targetType = 'pull request'
   } else if (context.type === 'file-history') {
-    contextInfo = `
-File: ${context.metadata.filePath}
+    contextInfo = `File: ${context.metadata.filePath}
 Recent commits:
 ${context.metadata.commits?.map((c) => `- ${c}`).join('\n') || 'N/A'}
 Latest author: ${context.metadata.author}
-Latest date: ${context.metadata.date}
-`
+Latest date: ${context.metadata.date}`
     targetType = 'file changes'
   } else if (context.type === 'uncommitted' || context.type === 'staged') {
-    contextInfo = `
-${context.type === 'staged' ? 'Staged changes (ready to commit)' : 'Uncommitted changes (work in progress)'}
-`
+    contextInfo = context.type === 'staged' ? 'Staged changes (ready to commit)' : 'Uncommitted changes (work in progress)'
     targetType = context.type === 'staged' ? 'staged changes' : 'uncommitted changes'
   } else {
-    contextInfo = `
-Commit: ${context.metadata.hash?.slice(0, 7)}
+    contextInfo = `Commit: ${context.metadata.hash?.slice(0, 7)}
 Message: ${context.title}
 Author: ${context.metadata.author}
-Date: ${context.metadata.date}
-`
+Date: ${context.metadata.date}`
     targetType = 'commit'
   }
+
+  const prompt = applyTemplate(template, 'explain', {
+    targetType,
+    context: contextInfo,
+    diff: context.diff?.slice(0, 12000) || ''
+  })
 
   const result = await generateObject({
     model,
     schema: ExplanationSchema,
-    prompt: `You are an expert at explaining code changes in a clear and insightful way.
-${projectContextSection}
-Analyze the following ${targetType} and provide a comprehensive explanation.
-
-${contextInfo}
-
-Diff:
-\`\`\`
-${context.diff?.slice(0, 12000)}
-\`\`\`
-
-Focus on:
-- What the changes accomplish (not just what files changed)
-- WHY these changes were likely made
-- The broader context and purpose
-- Any important implications or side effects
-
-Explain in a way that helps someone understand not just the "what" but the "why" behind these changes.${langInstruction}`
+    prompt
   })
 
   return result.object
@@ -465,49 +391,24 @@ export async function searchCommits(
   }>,
   options: AIOptions,
   maxResults: number = 5,
-  projectContext?: string
+  template?: string
 ): Promise<CommitSearchResult> {
   const model = await getModel(options)
-
-  const projectContextSection = projectContext
-    ? `
-IMPORTANT: Use this project context to better understand the codebase:
-
---- PROJECT CONTEXT START ---
-${projectContext.slice(0, 3000)}
---- PROJECT CONTEXT END ---
-`
-    : ''
 
   const commitList = commits
     .map((c) => `${c.hash.slice(0, 7)} | ${c.author} | ${c.date.split('T')[0]} | ${c.message.split('\n')[0]}`)
     .join('\n')
 
-  const langInstruction = getLanguageInstruction(getLanguage())
+  const prompt = applyTemplate(template, 'find', {
+    query,
+    commits: commitList,
+    maxResults: String(maxResults)
+  })
 
   const result = await generateObject({
     model,
     schema: CommitSearchSchema,
-    prompt: `You are an expert at understanding git history and finding relevant commits.
-${projectContextSection}
-The user is looking for commits related to: "${query}"
-
-Here are the commits to search through:
-\`\`\`
-${commitList}
-\`\`\`
-
-Find the commits that best match the user's query. Consider:
-- Commit messages that mention similar concepts
-- Related features, bug fixes, or changes
-- Semantic similarity (e.g., "login" matches "authentication")
-
-Return up to ${maxResults} matching commits, ordered by relevance (most relevant first).
-Only include commits that actually match the query - if none match well, return an empty array.
-
-For each match, provide:
-- The commit hash (first 7 characters are fine)
-- A brief reason explaining why this commit matches the query${langInstruction}`
+    prompt
   })
 
   // Enrich results with full commit data
@@ -546,40 +447,36 @@ export async function generateBranchName(
   context?: {
     type?: string
     issue?: string
-    convention?: string | null
-  }
+  },
+  template?: string
 ): Promise<string> {
   const model = await getModel(options)
 
-  const conventionInstructions = context?.convention
-    ? `
-IMPORTANT: Follow this project's branch naming convention:
+  const prompt = applyTemplate(template, 'branch', {
+    description,
+    type: context?.type,
+    issue: context?.issue
+  })
 
---- CONVENTION START ---
-${context.convention}
---- CONVENTION END ---
-`
-    : `
-Rules:
-- Use format: <type>/<short-description>
-- Types: feature, fix, hotfix, chore, refactor, docs, test
-- Use kebab-case for description
-- Keep it short (under 50 chars total)
-- No special characters except hyphens and slashes`
+  const result = await generateText({
+    model,
+    prompt,
+    maxTokens: 100
+  })
 
-  const typeHint = context?.type ? `\nBranch type: ${context.type}` : ''
-  const issueHint = context?.issue ? `\nInclude issue number: ${context.issue}` : ''
+  return result.text.trim().replace(/[^a-zA-Z0-9/_-]/g, '')
+}
 
-  const prompt = `You are an expert at creating git branch names.
+export async function generateBranchNameFromDiff(
+  diff: string,
+  options: AIOptions,
+  template?: string | null
+): Promise<string> {
+  const model = await getModel(options)
 
-Generate a clean, descriptive branch name for the following:
-
-Description: ${description}
-${typeHint}
-${issueHint}
-${conventionInstructions}
-
-Respond with ONLY the branch name, nothing else.`
+  const prompt = applyTemplate(template, 'checkout', {
+    diff: diff.slice(0, 8000)
+  })
 
   const result = await generateText({
     model,
@@ -592,26 +489,14 @@ Respond with ONLY the branch name, nothing else.`
 
 export async function generateStashName(
   diff: string,
-  options: AIOptions
+  options: AIOptions,
+  template?: string
 ): Promise<string> {
   const model = await getModel(options)
 
-  const prompt = `You are an expert at summarizing code changes.
-
-Generate a short, descriptive stash name for the following changes.
-
-Rules:
-- Start with "WIP: " prefix
-- Keep it under 50 characters total
-- Be specific about what the changes do
-- Use present tense
-
-Diff:
-\`\`\`
-${diff.slice(0, 4000)}
-\`\`\`
-
-Respond with ONLY the stash name, nothing else.`
+  const prompt = applyTemplate(template, 'stash', {
+    diff: diff.slice(0, 4000)
+  })
 
   const result = await generateText({
     model,
@@ -651,7 +536,8 @@ export async function generateWorkSummary(
     diff?: string
   },
   options: AIOptions,
-  format: 'daily' | 'weekly' | 'custom' = 'custom'
+  format: 'daily' | 'weekly' | 'custom' = 'custom',
+  template?: string
 ): Promise<WorkSummary> {
   const model = await getModel(options)
 
@@ -659,41 +545,26 @@ export async function generateWorkSummary(
     .map((c) => `- ${c.hash.slice(0, 7)} ${c.message.split('\n')[0]} (${c.date.split('T')[0]})`)
     .join('\n')
 
-  const langInstruction = getLanguageInstruction(getLanguage())
-
   const formatHint = format === 'daily'
     ? 'This is a daily report. Focus on today\'s accomplishments.'
     : format === 'weekly'
     ? 'This is a weekly report. Summarize the week\'s work at a higher level.'
     : `This is a summary from ${context.since}${context.until ? ` to ${context.until}` : ''}.`
 
+  const period = `${context.since}${context.until ? ` to ${context.until}` : ' to now'}`
+
+  const prompt = applyTemplate(template, 'summary', {
+    author: context.author,
+    period,
+    format: formatHint,
+    commits: commitList,
+    diff: context.diff?.slice(0, 6000)
+  })
+
   const result = await generateObject({
     model,
     schema: WorkSummarySchema,
-    prompt: `You are an expert at writing work summaries and reports.
-
-Generate a clear, professional work summary for the following git activity.
-
-Author: ${context.author}
-Period: ${context.since}${context.until ? ` to ${context.until}` : ' to now'}
-${formatHint}
-
-Commits:
-${commitList}
-
-${context.diff ? `
-Diff summary (truncated):
-\`\`\`
-${context.diff.slice(0, 6000)}
-\`\`\`
-` : ''}
-
-Focus on:
-- What was accomplished (not just listing commits)
-- Group related work together
-- Highlight important achievements
-- Use clear, non-technical language where possible
-- Make it suitable for sharing with team or manager${langInstruction}`
+    prompt
   })
 
   return {
@@ -713,46 +584,21 @@ export async function resolveConflict(
     theirsRef: string
   },
   options: AIOptions,
-  strategy?: string
+  template?: string
 ): Promise<ConflictResolution> {
   const model = await getModel(options)
 
-  const strategyInstructions = strategy
-    ? `
-IMPORTANT: Follow this project's merge strategy:
-
---- MERGE STRATEGY START ---
-${strategy}
---- MERGE STRATEGY END ---
-`
-    : `
-Rules:
-- Understand the intent of both changes
-- Combine changes when both are valid additions
-- Choose the more complete/correct version when they conflict
-- Preserve all necessary functionality`
+  const prompt = applyTemplate(template, 'merge', {
+    filename: context.filename,
+    oursRef: context.oursRef,
+    theirsRef: context.theirsRef,
+    content: conflictedContent
+  })
 
   const result = await generateObject({
     model,
     schema: ConflictResolutionSchema,
-    prompt: `You are an expert at resolving git merge conflicts intelligently.
-
-Analyze the following conflicted file and provide a resolution.
-
-File: ${context.filename}
-Merging: ${context.theirsRef} into ${context.oursRef}
-
-Conflicted content:
-\`\`\`
-${conflictedContent}
-\`\`\`
-${strategyInstructions}
-
-Additional rules:
-- The resolved content should be valid, working code
-- Do NOT include conflict markers (<<<<<<, =======, >>>>>>)
-
-Provide the fully resolved file content.`
+    prompt
   })
 
   return result.object

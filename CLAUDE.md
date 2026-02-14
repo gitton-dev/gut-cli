@@ -5,21 +5,29 @@
 ### Adding New Features
 - When adding a new command or feature, **always update README.md** to document it
 - Update the command table and usage examples
-- For AI-powered commands, **always add a corresponding `.gut/` template file** for project-specific customization
+- For AI-powered commands, **always add a corresponding `.gut/` template file**
   - **CRITICAL: This is mandatory. Do not forget this step.**
+  - Template files use `{{variable}}` syntax for variable substitution
   - Current mappings:
-    - `ai-commit` → `.gut/commit-convention.md`
-    - `ai-pr` → `.gut/pr-template.md`
-    - `ai-merge` → `.gut/merge-strategy.md`
-    - `ai-explain` → `.gut/explain.md`
-    - `ai-find` → `.gut/find.md`
-    - `ai-branch` → `.gut/branch-convention.md`
-    - `changelog` → `.gut/changelog-template.md`
+    - `commit` → `.gut/commit.md`
+    - `pr` → `.gut/pr.md`
+    - `review` → `.gut/review.md`
+    - `merge` → `.gut/merge.md`
+    - `explain` → `.gut/explain.md`
+    - `explain (file)` → `.gut/explain-file.md`
+    - `find` → `.gut/find.md`
+    - `branch` → `.gut/branch.md`
+    - `checkout` → `.gut/checkout.md`
+    - `changelog` → `.gut/changelog.md`
+    - `stash` → `.gut/stash.md`
+    - `summary` → `.gut/summary.md`
 
 ### Project Structure
 - Commands go in `src/commands/`
 - Shared AI logic goes in `src/lib/ai.ts`
-- Project-specific config files go in `.gut/`
+  - `findTemplate(repoRoot, templateName)` - Find user's project template
+  - `applyTemplate(userTemplate, templateName, variables)` - Apply variables to template
+- Prompt templates go in `.gut/`
 
 ### Build & Test
 ```bash

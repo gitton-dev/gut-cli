@@ -2,23 +2,9 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
-import { existsSync, readFileSync } from 'fs'
-import { join } from 'path'
 import { execSync } from 'child_process'
-import { generateBranchName } from '../lib/ai.js'
+import { generateBranchName, findTemplate } from '../lib/ai.js'
 import { Provider } from '../lib/credentials.js'
-
-const CONVENTION_PATHS = ['.gut/branch-convention.md', '.github/branch-convention.md']
-
-function findBranchConvention(repoRoot: string): string | null {
-  for (const conventionPath of CONVENTION_PATHS) {
-    const fullPath = join(repoRoot, conventionPath)
-    if (existsSync(fullPath)) {
-      return readFileSync(fullPath, 'utf-8')
-    }
-  }
-  return null
-}
 
 function getIssueInfo(issueNumber: string): { title: string; body: string } | null {
   try {
@@ -80,10 +66,10 @@ export const branchCommand = new Command('branch')
     }
 
     const provider = options.provider.toLowerCase() as Provider
-    const convention = findBranchConvention(repoRoot.trim())
+    const template = findTemplate(repoRoot.trim(), 'branch')
 
-    if (convention) {
-      console.log(chalk.gray('Using branch convention from project...'))
+    if (template) {
+      console.log(chalk.gray('Using template from project...'))
     }
 
     const spinner = ora('Generating branch name...').start()
@@ -92,11 +78,8 @@ export const branchCommand = new Command('branch')
       const branchName = await generateBranchName(
         description,
         { provider, model: options.model },
-        {
-          type: options.type,
-          issue: issueNumber,
-          convention
-        }
+        { type: options.type, issue: issueNumber },
+        template || undefined
       )
 
       spinner.stop()

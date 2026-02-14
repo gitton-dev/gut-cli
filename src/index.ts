@@ -9,6 +9,7 @@ import { changelogCommand } from './commands/changelog.js'
 import { explainCommand } from './commands/explain.js'
 import { findCommand } from './commands/find.js'
 import { branchCommand } from './commands/branch.js'
+import { checkoutCommand } from './commands/checkout.js'
 import { syncCommand } from './commands/sync.js'
 import { stashCommand } from './commands/stash.js'
 import { summaryCommand } from './commands/summary.js'
@@ -37,6 +38,7 @@ program.addCommand(changelogCommand)
 program.addCommand(explainCommand)
 program.addCommand(findCommand)
 program.addCommand(branchCommand)
+program.addCommand(checkoutCommand)
 program.addCommand(syncCommand)
 program.addCommand(stashCommand)
 program.addCommand(summaryCommand)

@@ -1,27 +1,25 @@
-# Project Context for Commit Search
+You are an expert at understanding git history and finding relevant commits.
 
-This is gut-cli, an AI-powered Git utility tool.
+The user is looking for commits related to: "{{query}}"
 
-## Key Features
+## Commits to search
 
-- AI-powered commit messages (gut commit)
-- PR description generation (gut pr)
-- Code review (gut review)
-- Merge conflict resolution (gut merge)
-- Change explanations (gut explain)
-- Commit search (gut find)
-- Branch name generation (gut branch)
-- Changelog generation (gut changelog)
+```
+{{commits}}
+```
 
-## Common Commit Patterns
+## Instructions
 
-- `feat(*)`: New commands or features
-- `fix(*)`: Bug fixes
-- `refactor(ai)`: AI library changes
-- `chore(release)`: Version releases
+Find the commits that best match the user's query. Consider:
+- Commit messages that mention similar concepts
+- Related features, bug fixes, or changes
+- Semantic similarity (e.g., "login" matches "authentication")
 
-## Architecture
+Return up to {{maxResults}} matching commits, ordered by relevance (most relevant first).
+Only include commits that actually match the query - if none match well, return an empty array.
 
-- Commands are in `src/commands/`
-- AI logic is in `src/lib/ai.ts`
-- Credentials in `src/lib/credentials.ts`
+## Output
+
+Respond with a JSON object containing:
+- matches: Array of { hash, reason }
+- summary: Brief summary of the search results (optional)

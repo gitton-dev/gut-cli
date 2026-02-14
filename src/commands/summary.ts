@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
-import { generateWorkSummary, WorkSummary } from '../lib/ai.js'
+import { generateWorkSummary, WorkSummary, findTemplate } from '../lib/ai.js'
 import { Provider } from '../lib/credentials.js'
 
 export const summaryCommand = new Command('summary')
@@ -94,16 +94,14 @@ export const summaryCommand = new Command('summary')
         date: c.date
       }))
 
+      const repoRoot = await git.revparse(['--show-toplevel']).catch(() => process.cwd())
+      const template = findTemplate(repoRoot.trim(), 'summary')
+
       const summary = await generateWorkSummary(
-        {
-          commits,
-          author,
-          since,
-          until: options.until,
-          diff
-        },
+        { commits, author, since, until: options.until, diff },
         { provider, model: options.model },
-        format
+        format,
+        template || undefined
       )
 
       spinner.stop()

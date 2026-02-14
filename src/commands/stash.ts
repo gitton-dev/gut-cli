@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
-import { generateStashName } from '../lib/ai.js'
+import { generateStashName, findTemplate } from '../lib/ai.js'
 import { Provider } from '../lib/credentials.js'
 
 export const stashCommand = new Command('stash')
@@ -125,7 +125,9 @@ export const stashCommand = new Command('stash')
       } else {
         const spinner = ora('Generating stash name...').start()
         try {
-          stashName = await generateStashName(fullDiff, { provider, model: options.model })
+          const repoRoot = await git.revparse(['--show-toplevel']).catch(() => process.cwd())
+          const template = findTemplate(repoRoot.trim(), 'stash')
+          stashName = await generateStashName(fullDiff, { provider, model: options.model }, template || undefined)
           spinner.stop()
         } catch (error) {
           spinner.fail('Failed to generate name, using default')

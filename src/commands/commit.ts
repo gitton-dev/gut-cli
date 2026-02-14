@@ -2,28 +2,8 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
-import { existsSync, readFileSync } from 'fs'
-import { join } from 'path'
-import { generateCommitMessage } from '../lib/ai.js'
+import { generateCommitMessage, findTemplate } from '../lib/ai.js'
 import { Provider } from '../lib/credentials.js'
-
-const CONVENTION_PATHS = [
-  '.gut/commit-convention.md',
-  '.github/commit-convention.md',
-  '.commit-convention.md',
-  'docs/commit-convention.md',
-  '.gitmessage'
-]
-
-function findCommitConvention(repoRoot: string): string | null {
-  for (const conventionPath of CONVENTION_PATHS) {
-    const fullPath = join(repoRoot, conventionPath)
-    if (existsSync(fullPath)) {
-      return readFileSync(fullPath, 'utf-8')
-    }
-  }
-  return null
-}
 
 export const commitCommand = new Command('commit')
   .description('Generate a commit message using AI')
@@ -54,8 +34,11 @@ export const commitCommand = new Command('commit')
 
     // Auto-stage if no staged changes
     if (!diff.trim()) {
+      const status = await git.status()
       const unstaged = await git.diff()
-      if (!unstaged.trim()) {
+      const hasUntracked = status.not_added.length > 0 || status.created.length > 0
+
+      if (!unstaged.trim() && !hasUntracked) {
         console.error(chalk.yellow('No changes to commit.'))
         process.exit(1)
       }
@@ -64,10 +47,10 @@ export const commitCommand = new Command('commit')
       diff = await git.diff(['--cached'])
     }
 
-    // Find commit convention
-    const convention = findCommitConvention(repoRoot.trim())
-    if (convention) {
-      console.log(chalk.gray('Using commit convention from project...'))
+    // Find template
+    const template = findTemplate(repoRoot.trim(), 'commit')
+    if (template) {
+      console.log(chalk.gray('Using template from project...'))
     }
 
     const spinner = ora('Generating commit message...').start()
@@ -76,7 +59,7 @@ export const commitCommand = new Command('commit')
       const message = await generateCommitMessage(
         diff,
         { provider, model: options.model },
-        convention || undefined
+        template || undefined
       )
 
       spinner.stop()

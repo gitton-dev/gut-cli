@@ -2,30 +2,8 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
-import { existsSync, readFileSync } from 'fs'
-import { join } from 'path'
-import { generateChangelog, Changelog } from '../lib/ai.js'
+import { generateChangelog, Changelog, findTemplate } from '../lib/ai.js'
 import { Provider } from '../lib/credentials.js'
-
-const CHANGELOG_PATHS = [
-  '.gut/changelog-template.md',
-  '.gut/CHANGELOG.md',
-  'CHANGELOG.md',
-  'HISTORY.md',
-  'CHANGES.md',
-  'changelog.md',
-  'docs/CHANGELOG.md'
-]
-
-function findChangelog(repoRoot: string): string | null {
-  for (const changelogPath of CHANGELOG_PATHS) {
-    const fullPath = join(repoRoot, changelogPath)
-    if (existsSync(fullPath)) {
-      return readFileSync(fullPath, 'utf-8')
-    }
-  }
-  return null
-}
 
 function formatChangelog(changelog: Changelog): string {
   const lines: string[] = []
@@ -105,29 +83,18 @@ export const changelogCommand = new Command('changelog')
       // Get diff
       const diff = await git.diff([`${fromRef}...${toRef}`])
 
-      // Find existing changelog for style reference
+      // Find template
       const repoRoot = await git.revparse(['--show-toplevel'])
-      const existingChangelog = findChangelog(repoRoot.trim())
+      const template = findTemplate(repoRoot.trim(), 'changelog')
 
-      // Extract template from existing changelog (first entry as reference)
-      let template: string | undefined
-      if (existingChangelog) {
-        const firstEntryMatch = existingChangelog.match(/## \[?[\d.]+\]?[\s\S]*?(?=## \[?[\d.]+\]?|$)/)
-        if (firstEntryMatch) {
-          template = firstEntryMatch[0].slice(0, 1500)
-        }
-        spinner.text = 'Found existing changelog, matching style...'
+      if (template) {
+        spinner.text = 'Using template from project...'
       }
 
       const changelog = await generateChangelog(
-        {
-          commits,
-          diff,
-          fromRef,
-          toRef,
-          template
-        },
-        { provider, model: options.model }
+        { commits, diff, fromRef, toRef },
+        { provider, model: options.model },
+        template || undefined
       )
 
       spinner.stop()
@@ -144,7 +111,7 @@ export const changelogCommand = new Command('changelog')
 
       console.log(chalk.gray(`\nRange: ${fromRef}..${toRef} (${commits.length} commits)`))
 
-      if (existingChangelog) {
+      if (template) {
         console.log(chalk.gray('Style matched from existing CHANGELOG.md'))
       }
     } catch (error) {
