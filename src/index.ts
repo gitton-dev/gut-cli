@@ -8,6 +8,9 @@ import { aiMergeCommand } from './commands/ai-merge.js'
 import { changelogCommand } from './commands/changelog.js'
 import { aiExplainCommand } from './commands/ai-explain.js'
 import { aiFindCommand } from './commands/ai-find.js'
+import { aiBranchCommand } from './commands/ai-branch.js'
+import { syncCommand } from './commands/sync.js'
+import { stashCommand } from './commands/stash.js'
 
 const program = new Command()
 
@@ -30,5 +33,8 @@ program.addCommand(aiMergeCommand)
 program.addCommand(changelogCommand)
 program.addCommand(aiExplainCommand)
 program.addCommand(aiFindCommand)
+program.addCommand(aiBranchCommand)
+program.addCommand(syncCommand)
+program.addCommand(stashCommand)
 
 program.parse()

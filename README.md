@@ -20,7 +20,10 @@ All AI commands support short aliases (without `ai-` prefix):
 | `gut ai-merge` | `gut merge` | Resolve merge conflicts |
 | `gut ai-explain` | `gut explain` | Explain changes, commits, PRs, or files |
 | `gut ai-find` | `gut find` | Find commits by vague description |
+| `gut ai-branch` | `gut branch` | Generate branch names from description |
 | `gut changelog` | - | Generate changelogs |
+| `gut sync` | - | Sync with remote (fetch + rebase/merge) |
+| `gut stash` | - | Stash with AI-generated names |
 
 ### `gut commit`
 
@@ -167,6 +170,75 @@ gut find "authentication" --json
 
 **Project Context Support**: Create `.gut/find.md` to provide project-specific context for better search results.
 
+### `gut branch`
+
+Generate branch names from GitHub issue or description using AI.
+
+```bash
+# Generate branch name from issue number (requires gh CLI)
+gut branch 123
+gut branch #123
+
+# Auto-checkout the branch
+gut branch 123 --checkout
+
+# Specify branch type
+gut branch 123 --type fix
+
+# Use description instead of issue
+gut branch -d "add user authentication"
+```
+
+**Branch Convention Support**: Create `.gut/branch-convention.md` for custom naming rules.
+
+### `gut sync`
+
+Sync current branch with remote (fetch + rebase).
+
+```bash
+# Sync current branch (rebase by default)
+gut sync
+
+# Use merge instead of rebase
+gut sync --merge
+
+# Auto-stash changes before sync
+gut sync --stash
+
+# Force sync with uncommitted changes
+gut sync --force
+```
+
+### `gut stash`
+
+Stash changes with AI-generated descriptive names.
+
+```bash
+# Stash with AI-generated name
+gut stash
+
+# Stash with custom name
+gut stash "working on auth"
+
+# List all stashes
+gut stash --list
+
+# Apply latest stash
+gut stash --apply
+
+# Apply specific stash
+gut stash --apply 2
+
+# Pop stash
+gut stash --pop
+
+# Drop stash
+gut stash --drop 1
+
+# Clear all stashes
+gut stash --clear
+```
+
 ### `gut changelog`
 
 Generate a changelog from commits.
@@ -239,6 +311,7 @@ gut looks for these configuration files in your repository:
 | `.gut/merge-strategy.md` | Merge conflict resolution rules |
 | `.gut/explain.md` | Project context for explanations |
 | `.gut/find.md` | Project context for commit search |
+| `.gut/branch-convention.md` | Custom branch naming rules |
 | `.github/pull_request_template.md` | PR template (fallback) |
 | `CHANGELOG.md` | Changelog style (fallback) |
 

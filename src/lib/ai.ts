@@ -527,6 +527,88 @@ For each match, provide:
   }
 }
 
+export async function generateBranchName(
+  description: string,
+  options: AIOptions,
+  context?: {
+    type?: string
+    issue?: string
+    convention?: string | null
+  }
+): Promise<string> {
+  const model = await getModel(options)
+
+  const conventionInstructions = context?.convention
+    ? `
+IMPORTANT: Follow this project's branch naming convention:
+
+--- CONVENTION START ---
+${context.convention}
+--- CONVENTION END ---
+`
+    : `
+Rules:
+- Use format: <type>/<short-description>
+- Types: feature, fix, hotfix, chore, refactor, docs, test
+- Use kebab-case for description
+- Keep it short (under 50 chars total)
+- No special characters except hyphens and slashes`
+
+  const typeHint = context?.type ? `\nBranch type: ${context.type}` : ''
+  const issueHint = context?.issue ? `\nInclude issue number: ${context.issue}` : ''
+
+  const prompt = `You are an expert at creating git branch names.
+
+Generate a clean, descriptive branch name for the following:
+
+Description: ${description}
+${typeHint}
+${issueHint}
+${conventionInstructions}
+
+Respond with ONLY the branch name, nothing else.`
+
+  const result = await generateText({
+    model,
+    prompt,
+    maxTokens: 100
+  })
+
+  return result.text.trim().replace(/[^a-zA-Z0-9/_-]/g, '')
+}
+
+export async function generateStashName(
+  diff: string,
+  options: AIOptions
+): Promise<string> {
+  const model = await getModel(options)
+
+  const prompt = `You are an expert at summarizing code changes.
+
+Generate a short, descriptive stash name for the following changes.
+
+Rules:
+- Start with "WIP: " prefix
+- Keep it under 50 characters total
+- Be specific about what the changes do
+- Use present tense
+
+Diff:
+\`\`\`
+${diff.slice(0, 4000)}
+\`\`\`
+
+Respond with ONLY the stash name, nothing else.`
+
+  const result = await generateText({
+    model,
+    prompt,
+    maxTokens: 100
+  })
+
+  return result.text.trim()
+}
+
 export async function resolveConflict(
   conflictedContent: string,
   context: {
