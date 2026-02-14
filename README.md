@@ -205,6 +205,10 @@ npm run dev
 npm link
 ```
 
+## Related
+
+Prefer a GUI? Check out [Gitton](https://jsers.dev/service/gitton) - a modern Git client for desktop.
+
 ## License
 
 MIT
