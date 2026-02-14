@@ -1,6 +1,6 @@
 {
   "name": "gut-cli",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Git Utility Tool - AI-powered git commands for smarter workflows",
   "type": "module",
   "bin": {
