@@ -1,5 +1,3 @@
-import keytar from 'keytar'
-
 const SERVICE_NAME = 'gut-cli'
 
 export type Provider = 'gemini' | 'openai' | 'anthropic'
@@ -22,7 +20,19 @@ const FALLBACK_ENV_MAP: Record<Provider, string> = {
   anthropic: 'ANTHROPIC_API_KEY'
 }
 
+async function getKeytar(): Promise<typeof import('keytar') | null> {
+  try {
+    return await import('keytar')
+  } catch {
+    return null
+  }
+}
+
 export async function saveApiKey(provider: Provider, apiKey: string): Promise<void> {
+  const keytar = await getKeytar()
+  if (!keytar) {
+    throw new Error('Keychain not available. Set environment variable instead.')
+  }
   await keytar.setPassword(SERVICE_NAME, PROVIDER_KEY_MAP[provider], apiKey)
 }
 
@@ -36,10 +46,16 @@ export async function getApiKey(provider: Provider): Promise<string | null> {
   if (fallbackKey) return fallbackKey
 
   // 3. Check system keychain
+  const keytar = await getKeytar()
+  if (!keytar) return null
   return keytar.getPassword(SERVICE_NAME, PROVIDER_KEY_MAP[provider])
 }
 
 export async function deleteApiKey(provider: Provider): Promise<boolean> {
+  const keytar = await getKeytar()
+  if (!keytar) {
+    throw new Error('Keychain not available.')
+  }
   return keytar.deletePassword(SERVICE_NAME, PROVIDER_KEY_MAP[provider])
 }
 
