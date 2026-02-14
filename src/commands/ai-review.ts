@@ -2,18 +2,49 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
+import { execSync } from 'child_process'
 import { generateCodeReview, CodeReview } from '../lib/ai.js'
 import { Provider } from '../lib/credentials.js'
 
+interface PRInfo {
+  number: number
+  title: string
+  author: string
+  url: string
+}
+
+async function getPRDiff(prNumber: string): Promise<{ diff: string; prInfo: PRInfo }> {
+  try {
+    const diff = execSync(`gh pr diff ${prNumber}`, { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 })
+    const prJsonStr = execSync(`gh pr view ${prNumber} --json number,title,author,url`, { encoding: 'utf-8' })
+    const prJson = JSON.parse(prJsonStr)
+    return {
+      diff,
+      prInfo: {
+        number: prJson.number,
+        title: prJson.title,
+        author: prJson.author.login,
+        url: prJson.url
+      }
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('gh: command not found')) {
+      throw new Error('GitHub CLI (gh) is not installed. Install it from https://cli.github.com/')
+    }
+    throw error
+  }
+}
+
 export const aiReviewCommand = new Command('ai-review')
   .alias('review')
-  .description('Get an AI code review of your changes')
+  .description('Get an AI code review of your changes or a GitHub PR')
+  .argument('[pr-number]', 'GitHub PR number to review')
   .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
   .option('-s, --staged', 'Review only staged changes')
   .option('-c, --commit <hash>', 'Review a specific commit')
   .option('--json', 'Output as JSON')
-  .action(async (options) => {
+  .action(async (prNumber, options) => {
     const git = simpleGit()
 
     // Check if we're in a git repository
@@ -29,8 +60,16 @@ export const aiReviewCommand = new Command('ai-review')
 
     try {
       let diff: string
+      let prInfo: PRInfo | null = null
 
-      if (options.commit) {
+      if (prNumber) {
+        // Review GitHub PR
+        spinner.text = `Fetching PR #${prNumber}...`
+        const result = await getPRDiff(prNumber)
+        diff = result.diff
+        prInfo = result.prInfo
+        spinner.text = `Reviewing PR #${prNumber}...`
+      } else if (options.commit) {
         // Review specific commit
         diff = await git.diff([`${options.commit}^`, options.commit])
         spinner.text = `Reviewing commit ${options.commit.slice(0, 7)}...`
@@ -61,8 +100,13 @@ export const aiReviewCommand = new Command('ai-review')
       spinner.stop()
 
       if (options.json) {
-        console.log(JSON.stringify(review, null, 2))
+        console.log(JSON.stringify({ prInfo, review }, null, 2))
         return
+      }
+
+      if (prInfo) {
+        console.log(chalk.bold(`\n🔗 PR #${prInfo.number}: ${prInfo.title}`))
+        console.log(chalk.gray(`   by ${prInfo.author} - ${prInfo.url}`))
       }
 
       printReview(review)
