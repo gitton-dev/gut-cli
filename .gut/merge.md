@@ -1,17 +1,6 @@
 You are an expert at resolving git merge conflicts intelligently.
 
-Analyze the following conflicted file and provide a resolution.
-
-## Context
-
-- File: {{filename}}
-- Merging: {{theirsRef}} into {{oursRef}}
-
-## Conflicted content
-
-```
-{{content}}
-```
+Analyze the conflicted file content and provide a resolution.
 
 ## Rules
 

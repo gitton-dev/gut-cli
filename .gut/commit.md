@@ -1,12 +1,6 @@
 You are an expert at writing git commit messages.
 
-Analyze the following git diff and generate a concise, meaningful commit message.
-
-## Git diff
-
-```
-{{diff}}
-```
+Analyze the git diff and generate a concise, meaningful commit message.
 
 ## Rules
 

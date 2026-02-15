@@ -1,16 +1,6 @@
 You are an expert at explaining code changes in a clear and insightful way.
 
-Analyze the following {{targetType}} and provide a comprehensive explanation.
-
-## Context
-
-{{context}}
-
-## Diff
-
-```
-{{diff}}
-```
+Analyze the changes based on the target type (commit, PR, file changes, etc.) and diff.
 
 ## Focus on
 

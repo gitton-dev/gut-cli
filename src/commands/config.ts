@@ -7,7 +7,6 @@ import { homedir } from 'os'
 import { simpleGit } from 'simple-git'
 import {
   getConfig,
-  getGlobalConfig,
   getLocalConfig,
   setLanguage,
   isValidLanguage,
@@ -68,7 +67,6 @@ configCommand
   .command('list')
   .description('List all configuration values')
   .action(() => {
-    const globalConfig = getGlobalConfig()
     const localConfig = getLocalConfig()
     const effectiveConfig = getConfig()
 

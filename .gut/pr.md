@@ -1,18 +1,6 @@
 You are an expert at writing pull request descriptions.
 
-Generate a clear and informative PR title and description based on the following information.
-
-## Context
-
-- Branch: {{currentBranch}} -> {{baseBranch}}
-- Commits:
-{{commits}}
-
-## Diff summary
-
-```
-{{diff}}
-```
+Generate a clear and informative PR title and description based on the branch information, commits, and diff.
 
 ## Rules for title
 

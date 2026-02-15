@@ -9,13 +9,16 @@ import { join, dirname } from 'path'
 import { homedir } from 'os'
 import { fileURLToPath } from 'url'
 import { getApiKey, Provider } from './credentials.js'
-import { getLanguage, getLanguageInstruction } from './config.js'
+import { type Language } from './config.js'
+
+export type { Language }
 
 export interface AIOptions {
   provider: Provider
   model?: string
   ollamaBaseUrl?: string // For Ollama provider
   apiKey?: string // Optional: directly provide API key (bypasses keytar/env lookup)
+  language?: Language // Language for AI responses ('en' | 'ja')
 }
 
 // Get the directory where gut is installed (for reading default templates)
@@ -93,40 +96,39 @@ export function findTemplate(repoRoot: string, templateName: string): string | n
 }
 
 /**
- * Replace template variables in the format {{variable}}
- * Also supports conditional sections: {{#var}}content{{/var}} (rendered if var exists)
+ * Build a prompt with context in XML format and instructions from template.
+ * Templates don't need to include variables - context is automatically prepended.
  *
  * @param userTemplate - User-provided template string or null/undefined
  * @param templateName - Name of the default template file in .gut/ (without .md extension)
- * @param variables - Variables to replace in the template
- * @returns Processed template with language instruction appended
+ * @param context - Context data to include (diff, commits, etc.)
+ * @param language - Language for AI responses
+ * @returns Complete prompt with XML context and instructions
  */
-function applyTemplate(
+function buildPrompt(
   userTemplate: string | null | undefined,
   templateName: string,
-  variables: Record<string, string | undefined>
+  context: Record<string, string | undefined>,
+  language?: Language
 ): string {
-  const langInstruction = getLanguageInstruction(getLanguage())
-
-  // Priority: user template > .gut/ template
-  let result = userTemplate || loadTemplate(templateName)
-
-  // Handle conditional sections: {{#var}}content{{/var}}
-  result = result.replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (_, key, content) => {
-    return variables[key] ? content : ''
-  })
-
-  // Replace simple variables: {{var}}
-  for (const [key, value] of Object.entries(variables)) {
-    result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value || '')
+  // Build XML context
+  let contextXml = '<context>\n'
+  for (const [key, value] of Object.entries(context)) {
+    if (value) {
+      contextXml += `<${key}>\n${value}\n</${key}>\n`
+    }
   }
+  contextXml += '</context>\n\n'
 
-  // Always append language instruction (for both user and default templates)
-  if (langInstruction) {
-    result += langInstruction
-  }
+  // Get template (user template takes priority)
+  const template = userTemplate || loadTemplate(templateName)
 
-  return result
+  // Build language instruction
+  const langInstruction = language === 'ja'
+    ? '\n\nIMPORTANT: Respond in Japanese (日本語で回答してください).'
+    : ''
+
+  return contextXml + '<instructions>\n' + template + langInstruction + '\n</instructions>'
 }
 
 const DEFAULT_MODELS: Record<Provider, string> = {
@@ -187,9 +189,9 @@ export async function generateCommitMessage(
 ): Promise<string> {
   const model = await getModel(options)
 
-  const prompt = applyTemplate(template, 'commit', {
+  const prompt = buildPrompt(template, 'commit', {
     diff: diff.slice(0, 8000)
-  })
+  }, options.language)
 
   const result = await generateText({
     model,
@@ -212,12 +214,12 @@ export async function generatePRDescription(
 ): Promise<{ title: string; body: string }> {
   const model = await getModel(options)
 
-  const prompt = applyTemplate(template, 'pr', {
+  const prompt = buildPrompt(template, 'pr', {
     baseBranch: context.baseBranch,
     currentBranch: context.currentBranch,
     commits: context.commits.map((c) => `- ${c}`).join('\n'),
     diff: context.diff.slice(0, 6000)
-  })
+  }, options.language)
 
   const result = await generateText({
     model,
@@ -259,9 +261,9 @@ export async function generateCodeReview(
 ): Promise<CodeReview> {
   const model = await getModel(options)
 
-  const prompt = applyTemplate(template, 'review', {
+  const prompt = buildPrompt(template, 'review', {
     diff: diff.slice(0, 10000)
-  })
+  }, options.language)
 
   const result = await generateObject({
     model,
@@ -302,13 +304,13 @@ export async function generateChangelog(
     .map((c) => `- ${c.hash.slice(0, 7)} ${c.message} (${c.author})`)
     .join('\n')
 
-  const prompt = applyTemplate(template, 'changelog', {
+  const prompt = buildPrompt(template, 'changelog', {
     fromRef: context.fromRef,
     toRef: context.toRef,
     commits: commitList,
     diff: context.diff.slice(0, 8000),
     todayDate: new Date().toISOString().split('T')[0]
-  })
+  }, options.language)
 
   const result = await generateObject({
     model,
@@ -366,10 +368,10 @@ export async function generateExplanation(
 
   // Handle file content explanation
   if (context.type === 'file-content') {
-    const prompt = applyTemplate(template, 'explain-file', {
+    const prompt = buildPrompt(template, 'explain-file', {
       filePath: context.metadata.filePath || '',
       content: context.content?.slice(0, 15000) || ''
-    })
+    }, options.language)
 
     const result = await generateObject({
       model,
@@ -408,11 +410,11 @@ Date: ${context.metadata.date}`
     targetType = 'commit'
   }
 
-  const prompt = applyTemplate(template, 'explain', {
+  const prompt = buildPrompt(template, 'explain', {
     targetType,
-    context: contextInfo,
+    contextInfo,
     diff: context.diff?.slice(0, 12000) || ''
-  })
+  }, options.language)
 
   const result = await generateObject({
     model,
@@ -465,11 +467,11 @@ export async function searchCommits(
     .map((c) => `${c.hash.slice(0, 7)} | ${c.author} | ${c.date.split('T')[0]} | ${c.message.split('\n')[0]}`)
     .join('\n')
 
-  const prompt = applyTemplate(template, 'find', {
+  const prompt = buildPrompt(template, 'find', {
     query,
     commits: commitList,
     maxResults: String(maxResults)
-  })
+  }, options.language)
 
   const result = await generateObject({
     model,
@@ -512,11 +514,11 @@ export async function generateBranchName(
 ): Promise<string> {
   const model = await getModel(options)
 
-  const prompt = applyTemplate(template, 'branch', {
+  const prompt = buildPrompt(template, 'branch', {
     description,
     type: context?.type,
     issue: context?.issue
-  })
+  }, options.language)
 
   const result = await generateText({
     model,
@@ -534,9 +536,9 @@ export async function generateBranchNameFromDiff(
 ): Promise<string> {
   const model = await getModel(options)
 
-  const prompt = applyTemplate(template, 'checkout', {
+  const prompt = buildPrompt(template, 'checkout', {
     diff: diff.slice(0, 8000)
-  })
+  }, options.language)
 
   const result = await generateText({
     model,
@@ -554,9 +556,9 @@ export async function generateStashName(
 ): Promise<string> {
   const model = await getModel(options)
 
-  const prompt = applyTemplate(template, 'stash', {
+  const prompt = buildPrompt(template, 'stash', {
     diff: diff.slice(0, 4000)
-  })
+  }, options.language)
 
   const result = await generateText({
     model,
@@ -613,13 +615,13 @@ export async function generateWorkSummary(
 
   const period = `${context.since}${context.until ? ` to ${context.until}` : ' to now'}`
 
-  const prompt = applyTemplate(template, 'summary', {
+  const prompt = buildPrompt(template, 'summary', {
     author: context.author,
     period,
     format: formatHint,
     commits: commitList,
     diff: context.diff?.slice(0, 6000)
-  })
+  }, options.language)
 
   const result = await generateObject({
     model,
@@ -648,12 +650,12 @@ export async function resolveConflict(
 ): Promise<ConflictResolution> {
   const model = await getModel(options)
 
-  const prompt = applyTemplate(template, 'merge', {
+  const prompt = buildPrompt(template, 'merge', {
     filename: context.filename,
     oursRef: context.oursRef,
     theirsRef: context.theirsRef,
     content: conflictedContent
-  })
+  }, options.language)
 
   const result = await generateObject({
     model,
@@ -675,11 +677,11 @@ export async function generateGitignore(
 ): Promise<string> {
   const model = await getModel(options)
 
-  const prompt = applyTemplate(template, 'gitignore', {
+  const prompt = buildPrompt(template, 'gitignore', {
     files: context.files,
     configFiles: context.configFiles,
     existingGitignore: context.existingGitignore
-  })
+  }, options.language)
 
   const result = await generateText({
     model,

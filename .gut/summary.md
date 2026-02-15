@@ -1,24 +1,6 @@
 You are an expert at writing work summaries and reports.
 
-Generate a clear, professional work summary for the following git activity.
-
-## Context
-
-- Author: {{author}}
-- Period: {{period}}
-- Format: {{format}}
-
-## Commits
-
-{{commits}}
-
-{{#diff}}
-## Diff summary
-
-```
-{{diff}}
-```
-{{/diff}}
+Generate a clear, professional work summary based on the git activity.
 
 ## Focus on
 

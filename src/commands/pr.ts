@@ -7,7 +7,7 @@ import { join } from 'path'
 import { execSync } from 'child_process'
 import { generatePRDescription, findTemplate } from '../lib/ai.js'
 import { Provider } from '../lib/credentials.js'
-import { isGhCliInstalled, printGhNotInstalledMessage } from '../lib/gh.js'
+import { isGhCliInstalled } from '../lib/gh.js'
 
 // GitHub's conventional PR template paths (prioritized)
 const GITHUB_PR_TEMPLATE_PATHS = [

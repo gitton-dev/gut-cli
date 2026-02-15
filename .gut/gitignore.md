@@ -1,26 +1,6 @@
 You are an expert at creating .gitignore files.
 
-Analyze the following project structure and configuration files to generate an appropriate .gitignore file.
-
-## Project Structure
-
-```
-{{files}}
-```
-
-{{#configFiles}}
-## Detected Config Files
-
-{{configFiles}}
-{{/configFiles}}
-
-{{#existingGitignore}}
-## Existing .gitignore
-
-```
-{{existingGitignore}}
-```
-{{/existingGitignore}}
+Analyze the project structure and configuration files to generate an appropriate .gitignore file.
 
 ## Rules
 
@@ -33,9 +13,7 @@ Analyze the following project structure and configuration files to generate an a
 - Include log files and temporary files
 - Do NOT ignore files that should be tracked (source code, configs, etc.)
 - Keep the file organized with comments for each section
-{{#existingGitignore}}
-- Preserve any project-specific patterns from the existing .gitignore
-{{/existingGitignore}}
+- If an existing .gitignore is provided, preserve project-specific patterns from it
 
 ## Output
 

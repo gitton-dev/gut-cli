@@ -49,10 +49,11 @@ export const branchCommand = new Command('branch')
         process.exit(1)
       }
 
-      issueNumber = issue.replace(/^#/, '')
-      const spinner = ora(`Fetching issue #${issueNumber}...`).start()
+      const cleanedIssue = issue.replace(/^#/, '')
+      issueNumber = cleanedIssue
+      const spinner = ora(`Fetching issue #${cleanedIssue}...`).start()
 
-      const issueInfo = getIssueInfo(issueNumber)
+      const issueInfo = getIssueInfo(cleanedIssue)
       if (!issueInfo) {
         spinner.fail(`Could not fetch issue #${issueNumber}`)
         console.log(chalk.gray('Make sure you are authenticated: gh auth login'))

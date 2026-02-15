@@ -3,7 +3,7 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { readdirSync, readFileSync, existsSync, writeFileSync } from 'fs'
-import { join, relative } from 'path'
+import { join } from 'path'
 import { generateGitignore, findTemplate } from '../lib/ai.js'
 import { Provider } from '../lib/credentials.js'
 

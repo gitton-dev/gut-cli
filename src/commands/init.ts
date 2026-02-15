@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { homedir } from 'os'
 import { fileURLToPath } from 'url'
@@ -71,6 +71,8 @@ async function translateTemplate(
       model = anthropic(modelName)
       break
     }
+    default:
+      throw new Error(`Unsupported provider for translation: ${provider}`)
   }
 
   const langNames: Record<string, string> = {

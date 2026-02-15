@@ -1,10 +1,4 @@
-You are an expert code reviewer. Analyze the following git diff and provide a structured review.
-
-## Git diff
-
-```
-{{diff}}
-```
+You are an expert code reviewer. Analyze the git diff and provide a structured review.
 
 ## Focus on
 

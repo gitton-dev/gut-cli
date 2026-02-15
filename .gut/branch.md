@@ -1,18 +1,6 @@
 You are an expert at creating git branch names.
 
-Generate a clean, descriptive branch name for the following:
-
-## Description
-
-{{description}}
-
-{{#type}}
-Branch type: {{type}}
-{{/type}}
-
-{{#issue}}
-Include issue number: {{issue}}
-{{/issue}}
+Generate a clean, descriptive branch name based on the description. If a branch type or issue number is available, incorporate them appropriately.
 
 ## Rules
 

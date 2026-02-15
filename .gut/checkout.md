@@ -1,14 +1,6 @@
-# Checkout Branch Name Generation
-
 You are an expert at creating git branch names.
 
-Analyze the following git diff and generate a clean, descriptive branch name that captures the essence of the changes.
-
-## Git diff
-
-```
-{{diff}}
-```
+Analyze the git diff and generate a clean, descriptive branch name that captures the essence of the changes.
 
 ## Branch Naming Convention
 

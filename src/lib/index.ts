@@ -21,7 +21,8 @@ export {
   type Explanation,
   type CommitSearchResult,
   type WorkSummary,
-  type ConflictResolution
+  type ConflictResolution,
+  type Language
 } from './ai.js'
 
 export { getApiKey, saveApiKey, deleteApiKey, listProviders, type Provider } from './credentials.js'

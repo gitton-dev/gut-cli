@@ -1,12 +1,6 @@
 You are an expert at summarizing code changes.
 
-Generate a short, descriptive stash name for the following changes.
-
-## Diff
-
-```
-{{diff}}
-```
+Generate a short, descriptive stash name based on the diff.
 
 ## Rules
 

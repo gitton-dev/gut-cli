@@ -1,18 +1,6 @@
 You are an expert at writing release notes and changelogs.
 
-Generate a changelog entry for changes from {{fromRef}} to {{toRef}}.
-
-Today's date is {{todayDate}}. Use this date for the release date.
-
-## Commits
-
-{{commits}}
-
-## Diff summary
-
-```
-{{diff}}
-```
+Generate a changelog entry based on the commits and diff. Use the provided fromRef, toRef, and todayDate for the release date.
 
 ## Format
 
