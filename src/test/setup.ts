@@ -18,7 +18,7 @@ export async function createTestRepo(prefix: string = 'gut-test'): Promise<TestG
   mkdirSync(dir, { recursive: true })
 
   const git = simpleGit(dir)
-  await git.init()
+  await git.init(['--initial-branch=main'])
   await git.addConfig('user.email', 'test@example.com')
   await git.addConfig('user.name', 'Test User')
 
