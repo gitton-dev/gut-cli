@@ -58,20 +58,90 @@ async function readSecretInput(prompt: string): Promise<string> {
   })
 }
 
+async function selectProvider(): Promise<Provider> {
+  return new Promise((resolve) => {
+    let selectedIndex = 0
+    const stdin = process.stdin
+
+    const render = () => {
+      // Clear previous output and re-render
+      process.stdout.write(`\x1b[${PROVIDERS.length}A`) // Move cursor up
+      for (let i = 0; i < PROVIDERS.length; i++) {
+        const provider = PROVIDERS[i]
+        const displayName = getProviderDisplayName(provider)
+        const prefix = i === selectedIndex ? chalk.cyan('❯') : ' '
+        const text = i === selectedIndex ? chalk.cyan(displayName) : displayName
+        process.stdout.write(`\x1b[2K${prefix} ${text}\n`) // Clear line and write
+      }
+    }
+
+    const initialRender = () => {
+      console.log(chalk.bold('\n🔑 Select AI Provider:\n'))
+      for (let i = 0; i < PROVIDERS.length; i++) {
+        const provider = PROVIDERS[i]
+        const displayName = getProviderDisplayName(provider)
+        const prefix = i === selectedIndex ? chalk.cyan('❯') : ' '
+        const text = i === selectedIndex ? chalk.cyan(displayName) : displayName
+        console.log(`${prefix} ${text}`)
+      }
+    }
+
+    initialRender()
+
+    stdin.setRawMode(true)
+    stdin.resume()
+    stdin.setEncoding('utf8')
+
+    const onData = (data: string) => {
+      const key = data
+
+      if (key === '\x1b[A' || key === 'k') {
+        // Up arrow or k
+        selectedIndex = (selectedIndex - 1 + PROVIDERS.length) % PROVIDERS.length
+        render()
+      } else if (key === '\x1b[B' || key === 'j') {
+        // Down arrow or j
+        selectedIndex = (selectedIndex + 1) % PROVIDERS.length
+        render()
+      } else if (key === '\r' || key === '\n') {
+        // Enter
+        stdin.setRawMode(false)
+        stdin.pause()
+        stdin.removeListener('data', onData)
+        console.log()
+        resolve(PROVIDERS[selectedIndex])
+      } else if (key === '\x03') {
+        // Ctrl+C
+        stdin.setRawMode(false)
+        stdin.pause()
+        console.log()
+        process.exit(0)
+      }
+    }
+
+    stdin.on('data', onData)
+  })
+}
+
 export const authCommand = new Command('auth').description('Manage API key authentication')
 
 authCommand
   .command('login')
   .description('Save an API key to the system keychain')
-  .requiredOption('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)')
+  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)')
   .option('-k, --key <key>', 'API key (if not provided, will prompt)')
   .action(async (options) => {
-    const provider = options.provider.toLowerCase() as Provider
+    let provider: Provider
 
-    if (!PROVIDERS.includes(provider)) {
-      console.error(chalk.red(`Invalid provider: ${options.provider}`))
-      console.error(chalk.gray(`Valid providers: ${PROVIDERS.join(', ')}`))
-      process.exit(1)
+    if (options.provider) {
+      provider = options.provider.toLowerCase() as Provider
+      if (!PROVIDERS.includes(provider)) {
+        console.error(chalk.red(`Invalid provider: ${options.provider}`))
+        console.error(chalk.gray(`Valid providers: ${PROVIDERS.join(', ')}`))
+        process.exit(1)
+      }
+    } else {
+      provider = await selectProvider()
     }
 
     let apiKey = options.key

@@ -16,6 +16,25 @@ No subscription required. Just bring your own API key from Gemini, OpenAI, or An
 npm install -g gut-cli
 ```
 
+## Quick Start
+
+```bash
+# 1. Set up your API key (stored securely in system keychain)
+gut auth login --provider gemini
+
+# 2. Start using gut
+gut commit          # Generate commit message
+gut pr              # Generate PR description
+gut review          # Get AI code review
+
+# 3. (Optional) Customize templates for your project
+gut init            # Creates .gut/ with editable prompt templates
+```
+
+Supported providers: `gemini` (default), `openai`, `anthropic`
+
+See [Authentication](#gut-auth) and [Template Configuration](#template-configuration) for more details.
+
 ## Commands
 
 | Command | Description |
