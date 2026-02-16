@@ -1,4 +1,5 @@
 import { createRequire } from 'module'
+import { getConfiguredProvider } from './config.js'
 
 const SERVICE_NAME = 'gut-cli'
 
@@ -99,4 +100,45 @@ export function getProviderDisplayName(provider: Provider): string {
     ollama: 'Ollama (Local)'
   }
   return names[provider]
+}
+
+/**
+ * Get the first provider that has an API key configured.
+ * Returns 'ollama' as last resort since it doesn't require an API key.
+ */
+export async function getFirstAvailableProvider(): Promise<Provider> {
+  const providers: Provider[] = ['gemini', 'openai', 'anthropic']
+  for (const provider of providers) {
+    const key = await getApiKey(provider)
+    if (key) {
+      return provider
+    }
+  }
+  // Ollama is always available (no API key needed)
+  return 'ollama'
+}
+
+/**
+ * Resolve the provider to use.
+ * Priority: CLI option (if provided) > config > first available (with API key) > ollama
+ *
+ * @param cliProvider - Provider specified via CLI option, or undefined if not specified
+ */
+export async function resolveProvider(cliProvider?: string): Promise<Provider> {
+  // If explicitly set via CLI, use it
+  if (cliProvider) {
+    return cliProvider.toLowerCase() as Provider
+  }
+
+  // Check config
+  const configProvider = getConfiguredProvider()
+  if (configProvider) {
+    // Verify the configured provider has an API key (unless it's ollama)
+    if (configProvider === 'ollama' || await getApiKey(configProvider)) {
+      return configProvider
+    }
+  }
+
+  // Fallback to first available provider with API key
+  return getFirstAvailableProvider()
 }

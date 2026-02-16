@@ -3,12 +3,12 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { generateStashName, findTemplate } from '../lib/ai.js'
-import { Provider } from '../lib/credentials.js'
+import { resolveProvider } from '../lib/credentials.js'
 
 export const stashCommand = new Command('stash')
   .description('Stash changes with AI-generated name')
   .argument('[name]', 'Custom stash name (skips AI generation)')
-  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
+  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
   .option('-l, --list', 'List all stashes')
   .option('-a, --apply [index]', 'Apply stash (default: latest)')
@@ -114,7 +114,7 @@ export const stashCommand = new Command('stash')
       stashName = name
     } else {
       // Generate name with AI
-      const provider = options.provider.toLowerCase() as Provider
+      const provider = await resolveProvider(options.provider)
       const diff = await git.diff()
       const stagedDiff = await git.diff(['--cached'])
       const fullDiff = diff + '\n' + stagedDiff

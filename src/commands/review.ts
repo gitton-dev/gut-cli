@@ -4,7 +4,7 @@ import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { execSync } from 'child_process'
 import { generateCodeReview, CodeReview, findTemplate } from '../lib/ai.js'
-import { Provider } from '../lib/credentials.js'
+import { resolveProvider } from '../lib/credentials.js'
 import { requireGhCli } from '../lib/gh.js'
 
 interface PRInfo {
@@ -39,7 +39,7 @@ async function getPRDiff(prNumber: string): Promise<{ diff: string; prInfo: PRIn
 export const reviewCommand = new Command('review')
   .description('Get an AI code review of your changes or a GitHub PR')
   .argument('[pr-number]', 'GitHub PR number to review')
-  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
+  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
   .option('-s, --staged', 'Review only staged changes')
   .option('-c, --commit <hash>', 'Review a specific commit')
@@ -54,7 +54,7 @@ export const reviewCommand = new Command('review')
       process.exit(1)
     }
 
-    const provider = options.provider.toLowerCase() as Provider
+    const provider = await resolveProvider(options.provider)
 
     const spinner = ora('Getting diff...').start()
 

@@ -4,7 +4,7 @@ import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { execSync } from 'child_process'
 import { generateBranchName, findTemplate } from '../lib/ai.js'
-import { Provider } from '../lib/credentials.js'
+import { resolveProvider } from '../lib/credentials.js'
 import { requireGhCli } from '../lib/gh.js'
 
 function getIssueInfo(issueNumber: string): { title: string; body: string } | null {
@@ -23,7 +23,7 @@ export const branchCommand = new Command('branch')
   .description('Generate a branch name from issue number or description')
   .argument('[issue]', 'Issue number (e.g., 123 or #123)')
   .option('-d, --description <description>', 'Use description instead of issue')
-  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
+  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
   .option('-t, --type <type>', 'Branch type (feature, fix, hotfix, chore, refactor)')
   .option('-c, --checkout', 'Create and checkout the branch')
@@ -71,7 +71,7 @@ export const branchCommand = new Command('branch')
       process.exit(1)
     }
 
-    const provider = options.provider.toLowerCase() as Provider
+    const provider = await resolveProvider(options.provider)
     const template = findTemplate(repoRoot.trim(), 'branch')
 
     if (template) {

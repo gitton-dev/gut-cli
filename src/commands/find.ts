@@ -3,12 +3,12 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { searchCommits, CommitSearchResult, findTemplate } from '../lib/ai.js'
-import { Provider } from '../lib/credentials.js'
+import { resolveProvider } from '../lib/credentials.js'
 
 export const findCommand = new Command('find')
   .description('Find commits matching a vague description using AI')
   .argument('<query>', 'Description of the change you are looking for (e.g., "login feature added")')
-  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
+  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
   .option('-n, --num <n>', 'Number of commits to search through', '100')
   .option('--path <path>', 'Limit search to commits affecting this path')
@@ -26,7 +26,7 @@ export const findCommand = new Command('find')
       process.exit(1)
     }
 
-    const provider = options.provider.toLowerCase() as Provider
+    const provider = await resolveProvider(options.provider)
     const repoRoot = await git.revparse(['--show-toplevel']).catch(() => process.cwd())
     const spinner = ora('Searching commits...').start()
 

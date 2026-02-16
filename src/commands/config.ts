@@ -9,8 +9,13 @@ import {
   getConfig,
   getLocalConfig,
   setLanguage,
+  setModel,
+  setProvider,
   isValidLanguage,
+  isValidProvider,
   VALID_LANGUAGES,
+  VALID_PROVIDERS,
+  DEFAULT_MODELS,
   type GutConfig
 } from '../lib/config.js'
 
@@ -43,9 +48,33 @@ configCommand
         console.error(chalk.red((err as Error).message))
         process.exit(1)
       }
+    } else if (key === 'model') {
+      try {
+        setModel(value, options.local ?? false)
+        const scope = options.local ? '(local)' : '(global)'
+        console.log(chalk.green(`✓ Model set to: ${value} ${scope}`))
+        console.log(chalk.gray(`Default models: ${Object.entries(DEFAULT_MODELS).map(([k, v]) => `${k}=${v}`).join(', ')}`))
+      } catch (err) {
+        console.error(chalk.red((err as Error).message))
+        process.exit(1)
+      }
+    } else if (key === 'provider') {
+      if (!isValidProvider(value)) {
+        console.error(chalk.red(`Invalid provider: ${value}`))
+        console.error(chalk.gray(`Valid providers: ${VALID_PROVIDERS.join(', ')}`))
+        process.exit(1)
+      }
+      try {
+        setProvider(value, options.local ?? false)
+        const scope = options.local ? '(local)' : '(global)'
+        console.log(chalk.green(`✓ Provider set to: ${value} ${scope}`))
+      } catch (err) {
+        console.error(chalk.red((err as Error).message))
+        process.exit(1)
+      }
     } else {
       console.error(chalk.red(`Unknown config key: ${key}`))
-      console.error(chalk.gray('Available keys: lang'))
+      console.error(chalk.gray('Available keys: lang, model, provider'))
       process.exit(1)
     }
   })

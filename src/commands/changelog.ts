@@ -3,7 +3,7 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { generateChangelog, Changelog, findTemplate } from '../lib/ai.js'
-import { Provider } from '../lib/credentials.js'
+import { resolveProvider } from '../lib/credentials.js'
 
 function formatChangelog(changelog: Changelog): string {
   const lines: string[] = []
@@ -37,7 +37,7 @@ export const changelogCommand = new Command('changelog')
   .description('Generate a changelog from commits between refs')
   .argument('[from]', 'Starting ref (tag, branch, commit)', 'HEAD~10')
   .argument('[to]', 'Ending ref', 'HEAD')
-  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
+  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
   .option('-t, --tag <tag>', 'Generate changelog since this tag')
   .option('--json', 'Output as JSON')
@@ -50,7 +50,7 @@ export const changelogCommand = new Command('changelog')
       process.exit(1)
     }
 
-    const provider = options.provider.toLowerCase() as Provider
+    const provider = await resolveProvider(options.provider)
     const spinner = ora('Analyzing commits...').start()
 
     try {

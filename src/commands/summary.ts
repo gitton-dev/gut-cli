@@ -3,11 +3,11 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { generateWorkSummary, WorkSummary, findTemplate } from '../lib/ai.js'
-import { Provider } from '../lib/credentials.js'
+import { resolveProvider } from '../lib/credentials.js'
 
 export const summaryCommand = new Command('summary')
   .description('Generate a work summary from your commits (for daily/weekly reports)')
-  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
+  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
   .option('--since <date>', 'Start date (default: today)', 'today')
   .option('--until <date>', 'End date')
@@ -27,7 +27,7 @@ export const summaryCommand = new Command('summary')
       process.exit(1)
     }
 
-    const provider = options.provider.toLowerCase() as Provider
+    const provider = await resolveProvider(options.provider)
     const spinner = ora('Generating summary...').start()
 
     try {

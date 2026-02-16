@@ -4,13 +4,23 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { execSync } from 'child_process'
 
 export type Language = 'en' | 'ja'
+export type Provider = 'gemini' | 'openai' | 'anthropic' | 'ollama'
 
 export interface GutConfig {
   lang: Language
+  model?: string
+  provider?: Provider
 }
 
 const DEFAULT_CONFIG: GutConfig = {
   lang: 'en'
+}
+
+export const DEFAULT_MODELS: Record<string, string> = {
+  gemini: 'gemini-2.5-flash',
+  openai: 'gpt-4.1-mini',
+  anthropic: 'claude-sonnet-4-5',
+  ollama: 'llama3.3'
 }
 
 function getGlobalConfigPath(): string {
@@ -119,4 +129,38 @@ export const VALID_LANGUAGES: Language[] = ['en', 'ja']
 
 export function isValidLanguage(lang: string): lang is Language {
   return VALID_LANGUAGES.includes(lang as Language)
+}
+
+export function getConfiguredModel(): string | undefined {
+  return getConfig().model
+}
+
+export function setModel(model: string, local: boolean = false): void {
+  if (local) {
+    setLocalConfig('model', model)
+  } else {
+    setGlobalConfig('model', model)
+  }
+}
+
+export function getDefaultModel(provider: string): string {
+  return DEFAULT_MODELS[provider] || DEFAULT_MODELS['gemini']
+}
+
+export const VALID_PROVIDERS: Provider[] = ['gemini', 'openai', 'anthropic', 'ollama']
+
+export function isValidProvider(provider: string): provider is Provider {
+  return VALID_PROVIDERS.includes(provider as Provider)
+}
+
+export function getConfiguredProvider(): Provider | undefined {
+  return getConfig().provider
+}
+
+export function setProvider(provider: Provider, local: boolean = false): void {
+  if (local) {
+    setLocalConfig('provider', provider)
+  } else {
+    setGlobalConfig('provider', provider)
+  }
 }

@@ -3,14 +3,14 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { resolveConflict, findTemplate } from '../lib/ai.js'
-import { Provider } from '../lib/credentials.js'
+import { resolveProvider } from '../lib/credentials.js'
 import * as fs from 'fs'
 import * as path from 'path'
 
 export const mergeCommand = new Command('merge')
   .description('Merge a branch with AI-powered conflict resolution')
   .argument('<branch>', 'Branch to merge')
-  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
+  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
   .option('--no-commit', 'Do not auto-commit after resolving')
   .action(async (branch, options) => {
@@ -22,7 +22,7 @@ export const mergeCommand = new Command('merge')
       process.exit(1)
     }
 
-    const provider = options.provider.toLowerCase() as Provider
+    const provider = await resolveProvider(options.provider)
 
     // Check for uncommitted changes
     const status = await git.status()

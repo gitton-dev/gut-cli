@@ -3,11 +3,11 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { generateBranchNameFromDiff, findTemplate } from '../lib/ai.js'
-import { Provider } from '../lib/credentials.js'
+import { resolveProvider } from '../lib/credentials.js'
 
 export const checkoutCommand = new Command('checkout')
   .description('Generate a branch name from current diff and checkout')
-  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
+  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
   .option('-y, --yes', 'Skip confirmation and checkout directly')
   .option('-s, --staged', 'Use staged changes only instead of all changes')
@@ -54,7 +54,7 @@ export const checkoutCommand = new Command('checkout')
 
     spinner.text = 'Generating branch name...'
 
-    const provider = options.provider.toLowerCase() as Provider
+    const provider = await resolveProvider(options.provider)
     const template = findTemplate(repoRoot.trim(), 'checkout')
 
     if (template) {

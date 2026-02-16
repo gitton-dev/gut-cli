@@ -3,11 +3,11 @@ import chalk from 'chalk'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { generateCommitMessage, findTemplate } from '../lib/ai.js'
-import { Provider } from '../lib/credentials.js'
+import { resolveProvider } from '../lib/credentials.js'
 
 export const commitCommand = new Command('commit')
   .description('Generate a commit message using AI')
-  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
+  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
   .option('-c, --commit', 'Automatically commit with the generated message')
   .option('-a, --all', 'Force stage all changes (default: auto-stage if nothing staged)')
@@ -22,7 +22,7 @@ export const commitCommand = new Command('commit')
       process.exit(1)
     }
 
-    const provider = options.provider.toLowerCase() as Provider
+    const provider = await resolveProvider(options.provider)
 
     // Stage all changes if requested
     if (options.all) {

@@ -5,13 +5,13 @@ import { simpleGit } from 'simple-git'
 import { execSync } from 'child_process'
 import { existsSync, readFileSync } from 'fs'
 import { generateExplanation, findTemplate } from '../lib/ai.js'
-import { Provider } from '../lib/credentials.js'
+import { resolveProvider } from '../lib/credentials.js'
 import { requireGhCli } from '../lib/gh.js'
 
 export const explainCommand = new Command('explain')
   .description('Get an AI-powered explanation of changes, commits, PRs, or files')
   .argument('[target]', 'Commit hash, PR number, PR URL, or file path (default: uncommitted changes)')
-  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
+  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
   .option('-s, --staged', 'Explain only staged changes')
   .option('-n, --commits <n>', 'Number of commits to analyze for file history (default: 1)', '1')
@@ -26,7 +26,7 @@ export const explainCommand = new Command('explain')
       process.exit(1)
     }
 
-    const provider = options.provider.toLowerCase() as Provider
+    const provider = await resolveProvider(options.provider)
     const repoRoot = await git.revparse(['--show-toplevel']).catch(() => process.cwd())
     const spinner = ora('Analyzing...').start()
 

@@ -9,7 +9,7 @@ import { join, dirname } from 'path'
 import { homedir } from 'os'
 import { fileURLToPath } from 'url'
 import { getApiKey, Provider } from './credentials.js'
-import { type Language } from './config.js'
+import { type Language, getConfiguredModel, getDefaultModel } from './config.js'
 
 export type { Language }
 
@@ -139,15 +139,9 @@ function buildPrompt(
   return contextXml + '<instructions>\n' + template + langInstruction + '\n</instructions>' + outputSection
 }
 
-const DEFAULT_MODELS: Record<Provider, string> = {
-  gemini: 'gemini-2.0-flash',
-  openai: 'gpt-4o-mini',
-  anthropic: 'claude-sonnet-4-20250514',
-  ollama: 'llama3.2'
-}
-
 async function getModel(options: AIOptions) {
-  const modelName = options.model || DEFAULT_MODELS[options.provider]
+  // Priority: options.model > config model > default model
+  const modelName = options.model || getConfiguredModel() || getDefaultModel(options.provider)
 
   // Helper to get API key: use provided key or fall back to keytar/env
   async function resolveApiKey(): Promise<string | null> {

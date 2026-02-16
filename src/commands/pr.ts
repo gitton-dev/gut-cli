@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { execSync } from 'child_process'
 import { generatePRDescription, findTemplate } from '../lib/ai.js'
-import { Provider } from '../lib/credentials.js'
+import { resolveProvider } from '../lib/credentials.js'
 import { isGhCliInstalled } from '../lib/gh.js'
 
 // GitHub's conventional PR template paths (prioritized)
@@ -33,7 +33,7 @@ function findPRTemplate(repoRoot: string): string | null {
 
 export const prCommand = new Command('pr')
   .description('Generate a pull request title and description using AI')
-  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
+  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
   .option('-b, --base <branch>', 'Base branch to compare against (default: main or master)')
   .option('--create', 'Create the PR using gh CLI')
@@ -48,7 +48,7 @@ export const prCommand = new Command('pr')
       process.exit(1)
     }
 
-    const provider = options.provider.toLowerCase() as Provider
+    const provider = await resolveProvider(options.provider)
 
     const spinner = ora('Analyzing branch...').start()
 

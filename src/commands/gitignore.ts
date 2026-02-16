@@ -5,7 +5,7 @@ import { simpleGit } from 'simple-git'
 import { readdirSync, readFileSync, existsSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { generateGitignore, findTemplate } from '../lib/ai.js'
-import { Provider } from '../lib/credentials.js'
+import { resolveProvider } from '../lib/credentials.js'
 
 // Config files that indicate language/framework
 const CONFIG_FILES = [
@@ -121,7 +121,7 @@ function findConfigFiles(repoRoot: string): Map<string, string> {
 
 export const gitignoreCommand = new Command('gitignore')
   .description('Generate .gitignore from current codebase')
-  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic)', 'gemini')
+  .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
   .option('-o, --output <file>', 'Output file (default: .gitignore)', '.gitignore')
   .option('--stdout', 'Print to stdout instead of file')
@@ -131,7 +131,7 @@ export const gitignoreCommand = new Command('gitignore')
     const repoRoot = await git.revparse(['--show-toplevel']).catch(() => process.cwd())
     const root = repoRoot.trim()
 
-    const provider = options.provider.toLowerCase() as Provider
+    const provider = await resolveProvider(options.provider)
     const template = findTemplate(root, 'gitignore')
 
     if (template) {
