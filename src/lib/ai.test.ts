@@ -60,8 +60,10 @@ vi.mock('ai', async () => {
         notes: [],
         // For search
         matches: [{ hash: 'abc1234', reason: 'Matches query' }],
-        // For work summary
+        // For PR description
         title: 'Test title',
+        body: 'Test PR body',
+        // For work summary
         overview: 'Test overview',
         highlights: ['Highlight 1'],
         details: [{ category: 'Feature', items: ['Item 1'] }],

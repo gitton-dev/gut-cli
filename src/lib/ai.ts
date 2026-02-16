@@ -207,6 +207,13 @@ export async function generateCommitMessage(
   return result.text.trim()
 }
 
+const PRDescriptionSchema = z.object({
+  title: z.string().describe('Concise PR title (50-72 chars)'),
+  body: z.string().describe('PR description in markdown format')
+})
+
+export type PRDescription = z.infer<typeof PRDescriptionSchema>
+
 export async function generatePRDescription(
   context: {
     baseBranch: string
@@ -228,31 +235,16 @@ export async function generatePRDescription(
       commits: context.commits.map((c) => `- ${c}`).join('\n'),
       diff: context.diff.slice(0, 6000)
     },
-    options.language,
-    `Respond in JSON format:
-\`\`\`json
-{
-  "title": "...",
-  "body": "..."
-}
-\`\`\``
+    options.language
   )
 
-  const result = await generateText({
+  const result = await generateObject({
     model,
-    prompt,
-    maxTokens: 2000
+    schema: PRDescriptionSchema,
+    prompt
   })
 
-  try {
-    const cleaned = result.text.replace(/```json\n?|\n?```/g, '').trim()
-    return JSON.parse(cleaned)
-  } catch {
-    return {
-      title: context.currentBranch.replace(/[-_]/g, ' '),
-      body: result.text
-    }
-  }
+  return result.object
 }
 
 const CodeReviewSchema = z.object({
