@@ -1,103 +1,169 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createTestRepo, credentialsMocks, type TestGitRepo } from '../test/setup.js'
 
-// Mock credentials
-vi.mock('../lib/credentials.js', () => ({
-  resolveProvider: vi.fn(credentialsMocks.resolveProvider),
-  getApiKey: vi.fn(credentialsMocks.getApiKey)
+// Mock process.exit
+const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+  throw new Error('process.exit called')
+})
+
+// Mock console methods
+vi.spyOn(console, 'log').mockImplementation(() => {})
+vi.spyOn(console, 'error').mockImplementation(() => {})
+
+// Mock ora spinner
+vi.mock('ora', () => ({
+  default: vi.fn(() => ({
+    start: vi.fn().mockReturnThis(),
+    stop: vi.fn().mockReturnThis(),
+    fail: vi.fn().mockReturnThis(),
+    info: vi.fn().mockReturnThis(),
+    warn: vi.fn().mockReturnThis(),
+    succeed: vi.fn().mockReturnThis(),
+    text: ''
+  }))
 }))
 
-describe('cleanup command - git operations', () => {
-  let repo: TestGitRepo
+// Mock readline for prompts
+vi.mock('node:readline', () => ({
+  createInterface: vi.fn(() => ({
+    question: vi.fn((_, cb) => cb('y')),
+    close: vi.fn()
+  }))
+}))
 
-  beforeEach(async () => {
-    repo = await createTestRepo('cleanup')
+// Mock simple-git
+const mockGit = {
+  checkIsRepo: vi.fn(() => Promise.resolve(true)),
+  fetch: vi.fn(() => Promise.resolve()),
+  branch: vi.fn(() =>
+    Promise.resolve({
+      current: 'main',
+      all: ['main', 'feature/merged-branch', 'feature/another']
+    })
+  ),
+  deleteLocalBranch: vi.fn(() => Promise.resolve()),
+  push: vi.fn(() => Promise.resolve())
+}
+
+vi.mock('simple-git', () => ({
+  simpleGit: vi.fn(() => mockGit)
+}))
+
+// Import the command after mocks
+import { cleanupCommand } from './cleanup.js'
+
+describe('cleanupCommand', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGit.checkIsRepo.mockResolvedValue(true)
+    mockGit.branch.mockResolvedValue({
+      current: 'main',
+      all: ['main', 'feature/merged-branch']
+    })
   })
 
   afterEach(() => {
-    repo.cleanup()
     vi.clearAllMocks()
   })
 
   describe('merged branch detection', () => {
-    it('should detect merged branches', async () => {
-      // Create and merge a branch
-      await repo.git.checkoutLocalBranch('feature/merged')
-      repo.writeFile('merged.ts', 'merged\n')
-      await repo.git.add('merged.ts')
-      await repo.git.commit('Add merged feature')
+    it('should detect and list merged branches', async () => {
+      mockGit.branch
+        .mockResolvedValueOnce({ current: 'main', all: ['main'] }) // First call for current branch
+        .mockResolvedValueOnce({ current: 'main', all: ['main', 'feature/merged'] }) // Second call for merged branches
 
-      await repo.git.checkout('main')
-      await repo.git.merge(['feature/merged'])
+      await cleanupCommand.parseAsync(['--force'], { from: 'user' })
 
-      // Get merged branches (excluding main)
-      const merged = await repo.git.branch(['--merged', 'main'])
-      expect(merged.all).toContain('feature/merged')
+      expect(mockGit.fetch).toHaveBeenCalledWith(['--prune'])
     })
 
-    it('should exclude current branch', async () => {
-      const branches = await repo.git.branchLocal()
-      expect(branches.current).toBe('main')
+    it('should show message when no merged branches found', async () => {
+      mockGit.branch.mockResolvedValue({
+        current: 'main',
+        all: ['main']
+      })
+
+      await cleanupCommand.parseAsync([], { from: 'user' })
+
+      // Should not try to delete anything
+      expect(mockGit.deleteLocalBranch).not.toHaveBeenCalled()
     })
   })
 
   describe('branch deletion', () => {
-    it('should delete merged branch', async () => {
-      // Create and merge
-      await repo.git.checkoutLocalBranch('feature/to-delete')
-      repo.writeFile('delete.ts', 'delete\n')
-      await repo.git.add('delete.ts')
-      await repo.git.commit('Delete commit')
+    it('should delete merged branches with --force', async () => {
+      mockGit.branch
+        .mockResolvedValueOnce({ current: 'main', all: ['main', 'feature/to-delete'] })
+        .mockResolvedValueOnce({ current: 'main', all: ['main', 'feature/to-delete'] })
 
-      await repo.git.checkout('main')
-      await repo.git.merge(['feature/to-delete'])
+      await cleanupCommand.parseAsync(['--force'], { from: 'user' })
 
-      // Delete
-      await repo.git.deleteLocalBranch('feature/to-delete')
-
-      const branches = await repo.git.branchLocal()
-      expect(branches.all).not.toContain('feature/to-delete')
+      expect(mockGit.deleteLocalBranch).toHaveBeenCalled()
     })
 
-    it('should not delete unmerged branch without force', async () => {
-      await repo.git.checkoutLocalBranch('feature/unmerged')
-      repo.writeFile('unmerged.ts', 'unmerged\n')
-      await repo.git.add('unmerged.ts')
-      await repo.git.commit('Unmerged commit')
+    it('should not delete branches in dry-run mode', async () => {
+      mockGit.branch
+        .mockResolvedValueOnce({ current: 'main', all: ['main', 'feature/merged'] })
+        .mockResolvedValueOnce({ current: 'main', all: ['main', 'feature/merged'] })
 
-      await repo.git.checkout('main')
+      await cleanupCommand.parseAsync(['--dry-run'], { from: 'user' })
 
-      // Should fail without force
-      await expect(repo.git.deleteLocalBranch('feature/unmerged')).rejects.toThrow()
+      expect(mockGit.deleteLocalBranch).not.toHaveBeenCalled()
     })
 
-    it('should force delete unmerged branch', async () => {
-      await repo.git.checkoutLocalBranch('feature/force-delete')
-      repo.writeFile('force.ts', 'force\n')
-      await repo.git.add('force.ts')
-      await repo.git.commit('Force commit')
+    it('should handle --remote flag for remote branch deletion', async () => {
+      mockGit.branch
+        .mockResolvedValueOnce({ current: 'main', all: ['main', 'feature/merged'] })
+        .mockResolvedValueOnce({ current: 'main', all: ['main', 'feature/merged'] })
 
-      await repo.git.checkout('main')
+      await cleanupCommand.parseAsync(['--force', '--remote'], { from: 'user' })
 
-      // Force delete
-      await repo.git.deleteLocalBranch('feature/force-delete', true)
-
-      const branches = await repo.git.branchLocal()
-      expect(branches.all).not.toContain('feature/force-delete')
+      // Command should process without error
+      expect(mockGit.fetch).toHaveBeenCalled()
     })
   })
 
-  describe('branch listing', () => {
-    it('should list all local branches', async () => {
-      await repo.git.checkoutLocalBranch('feature/a')
-      await repo.git.checkout('main')
-      await repo.git.checkoutLocalBranch('feature/b')
-      await repo.git.checkout('main')
+  describe('base branch selection', () => {
+    it('should use specified base branch', async () => {
+      mockGit.branch
+        .mockResolvedValueOnce({ current: 'develop', all: ['develop', 'feature/merged'] })
+        .mockResolvedValueOnce({ current: 'develop', all: ['develop', 'feature/merged'] })
 
-      const branches = await repo.git.branchLocal()
-      expect(branches.all).toContain('main')
-      expect(branches.all).toContain('feature/a')
-      expect(branches.all).toContain('feature/b')
+      await cleanupCommand.parseAsync(['--base', 'develop', '--dry-run'], { from: 'user' })
+
+      expect(mockGit.branch).toHaveBeenCalledWith(['--merged', 'develop'])
+    })
+  })
+
+  describe('error handling', () => {
+    it('should exit when not in a git repository', async () => {
+      mockGit.checkIsRepo.mockResolvedValue(false)
+
+      await expect(cleanupCommand.parseAsync([], { from: 'user' })).rejects.toThrow(
+        'process.exit called'
+      )
+
+      expect(mockExit).toHaveBeenCalledWith(1)
+    })
+  })
+
+  describe('protected branches', () => {
+    it('should not delete main, master, or develop branches', async () => {
+      mockGit.branch
+        .mockResolvedValueOnce({ current: 'feature/test', all: ['main', 'master', 'develop'] })
+        .mockResolvedValueOnce({
+          current: 'feature/test',
+          all: ['main', 'master', 'develop', 'feature/merged']
+        })
+
+      await cleanupCommand.parseAsync(['--force'], { from: 'user' })
+
+      // Should only delete feature/merged, not protected branches
+      const deleteCalls = mockGit.deleteLocalBranch.mock.calls as string[][]
+      for (const call of deleteCalls) {
+        expect(call[0]).not.toBe('main')
+        expect(call[0]).not.toBe('master')
+        expect(call[0]).not.toBe('develop')
+      }
     })
   })
 })

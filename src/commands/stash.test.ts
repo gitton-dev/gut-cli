@@ -1,135 +1,131 @@
-import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { aiMocks, createTestRepo, credentialsMocks, type TestGitRepo } from '../test/setup.js'
+
+// Mock process.exit
+const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+  throw new Error('process.exit called')
+})
+
+// Mock console methods
+vi.spyOn(console, 'log').mockImplementation(() => {})
+vi.spyOn(console, 'error').mockImplementation(() => {})
+
+// Mock ora spinner
+vi.mock('ora', () => ({
+  default: vi.fn(() => ({
+    start: vi.fn().mockReturnThis(),
+    stop: vi.fn().mockReturnThis(),
+    fail: vi.fn().mockReturnThis(),
+    info: vi.fn().mockReturnThis(),
+    text: ''
+  }))
+}))
+
+// Mock readline for prompts
+vi.mock('node:readline', () => ({
+  createInterface: vi.fn(() => ({
+    question: vi.fn((_, cb) => cb('y')),
+    close: vi.fn()
+  }))
+}))
 
 // Mock AI module
 vi.mock('../lib/ai.js', () => ({
-  generateStashName: vi.fn(aiMocks.generateStashName),
-  findTemplate: vi.fn(aiMocks.findTemplate)
+  generateStashName: vi.fn(() => Promise.resolve('WIP: test changes')),
+  findTemplate: vi.fn(() => null)
 }))
 
 // Mock credentials
 vi.mock('../lib/credentials.js', () => ({
-  resolveProvider: vi.fn(credentialsMocks.resolveProvider),
-  getApiKey: vi.fn(credentialsMocks.getApiKey)
+  resolveProvider: vi.fn(() => Promise.resolve('gemini')),
+  getApiKey: vi.fn(() => 'test-api-key'),
+  Provider: {}
 }))
 
-import { generateStashName } from '../lib/ai.js'
+// Mock simple-git
+const mockGit = {
+  checkIsRepo: vi.fn(() => Promise.resolve(true)),
+  revparse: vi.fn(() => Promise.resolve('/test/repo')),
+  status: vi.fn(() =>
+    Promise.resolve({
+      isClean: (() => false) as () => boolean,
+      modified: ['file.ts'] as string[],
+      not_added: [] as string[]
+    })
+  ),
+  stash: vi.fn(() => Promise.resolve()),
+  stashList: vi.fn(() =>
+    Promise.resolve({
+      all: [{ message: 'WIP: test stash' }]
+    })
+  ),
+  diff: vi.fn(() => Promise.resolve('diff content'))
+}
 
-describe('stash command - git operations', () => {
-  let repo: TestGitRepo
+vi.mock('simple-git', () => ({
+  simpleGit: vi.fn(() => mockGit)
+}))
 
-  beforeEach(async () => {
-    repo = await createTestRepo('stash')
+// Import the command after mocks
+import { stashCommand } from './stash.js'
+
+describe('stashCommand', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGit.checkIsRepo.mockResolvedValue(true)
+    mockGit.status.mockResolvedValue({
+      isClean: (() => false) as () => boolean,
+      modified: ['file.ts'] as string[],
+      not_added: [] as string[]
+    })
   })
 
   afterEach(() => {
-    repo.cleanup()
     vi.clearAllMocks()
   })
 
-  describe('stash name generation', () => {
-    it('should generate stash name from diff', async () => {
-      const diff = 'diff --git a/auth.ts\n+export function login() {}'
-      const stashName = await generateStashName(diff, { provider: 'gemini' })
-
-      expect(stashName).toBe('WIP: test changes')
-      expect(generateStashName).toHaveBeenCalledWith(diff, { provider: 'gemini' })
-    })
-  })
-
   describe('stash creation', () => {
-    it('should stash modified files', async () => {
-      repo.writeFile('README.md', '# Updated Test\n')
+    it('should create stash with AI-generated name', async () => {
+      await stashCommand.parseAsync([], { from: 'user' })
 
-      let status = await repo.git.status()
-      expect(status.modified).toContain('README.md')
-
-      await repo.git.stash(['push', '-m', 'WIP: test stash'])
-
-      status = await repo.git.status()
-      expect(status.isClean()).toBe(true)
-
-      const stashList = await repo.git.stashList()
-      expect(stashList.all.length).toBe(1)
-      expect(stashList.all[0].message).toContain('WIP: test stash')
+      expect(mockGit.stash).toHaveBeenCalledWith(['push', '-u', '-m', 'WIP: test changes'])
     })
 
-    it('should stash untracked files with -u flag', async () => {
-      repo.writeFile('untracked.ts', 'new file\n')
+    it('should create stash with custom name', async () => {
+      await stashCommand.parseAsync(['my custom stash'], { from: 'user' })
 
-      let status = await repo.git.status()
-      expect(status.not_added).toContain('untracked.ts')
+      expect(mockGit.stash).toHaveBeenCalledWith(['push', '-u', '-m', 'my custom stash'])
+    })
 
-      await repo.git.stash(['push', '-u', '-m', 'WIP: with untracked'])
+    it('should show message when no changes to stash', async () => {
+      mockGit.status.mockResolvedValue({
+        isClean: (() => true) as () => boolean,
+        modified: [] as string[],
+        not_added: [] as string[]
+      })
 
-      status = await repo.git.status()
-      expect(status.isClean()).toBe(true)
+      await stashCommand.parseAsync([], { from: 'user' })
+
+      expect(mockGit.stash).not.toHaveBeenCalled()
     })
   })
 
-  describe('stash operations', () => {
-    beforeEach(async () => {
-      repo.writeFile('README.md', '# Modified\n')
-      await repo.git.stash(['push', '-m', 'WIP: first stash'])
+  describe('stash list', () => {
+    it('should list stashes with -l flag', async () => {
+      await stashCommand.parseAsync(['-l'], { from: 'user' })
 
-      repo.writeFile('README.md', '# Modified again\n')
-      await repo.git.stash(['push', '-m', 'WIP: second stash'])
-    })
-
-    it('should list all stashes', async () => {
-      const stashList = await repo.git.stashList()
-      expect(stashList.all.length).toBe(2)
-    })
-
-    it('should apply stash without removing it', async () => {
-      await repo.git.stash(['apply', 'stash@{0}'])
-
-      const status = await repo.git.status()
-      expect(status.modified).toContain('README.md')
-
-      const stashList = await repo.git.stashList()
-      expect(stashList.all.length).toBe(2)
-    })
-
-    it('should pop stash and remove it', async () => {
-      await repo.git.stash(['pop', 'stash@{0}'])
-
-      const status = await repo.git.status()
-      expect(status.modified).toContain('README.md')
-
-      const stashList = await repo.git.stashList()
-      expect(stashList.all.length).toBe(1)
-    })
-
-    it('should drop specific stash', async () => {
-      await repo.git.stash(['drop', 'stash@{0}'])
-
-      const stashList = await repo.git.stashList()
-      expect(stashList.all.length).toBe(1)
-    })
-
-    it('should clear all stashes', async () => {
-      await repo.git.stash(['clear'])
-
-      const stashList = await repo.git.stashList()
-      expect(stashList.all.length).toBe(0)
+      expect(mockGit.stashList).toHaveBeenCalled()
     })
   })
 
-  describe('stash content preservation', () => {
-    it('should preserve file content after stash pop', async () => {
-      const content = 'const important = "data";\n'
-      const filePath = repo.writeFile('important.ts', content)
+  describe('error handling', () => {
+    it('should exit when not in a git repository', async () => {
+      mockGit.checkIsRepo.mockResolvedValue(false)
 
-      await repo.git.add('important.ts')
-      await repo.git.stash(['push', '-m', 'WIP: important changes'])
+      await expect(stashCommand.parseAsync([], { from: 'user' })).rejects.toThrow(
+        'process.exit called'
+      )
 
-      expect((await repo.git.status()).isClean()).toBe(true)
-
-      await repo.git.stash(['pop'])
-      const restored = readFileSync(filePath, 'utf-8')
-      expect(restored).toBe(content)
+      expect(mockExit).toHaveBeenCalledWith(1)
     })
   })
 })

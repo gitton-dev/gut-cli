@@ -1,98 +1,235 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createTestRepo, credentialsMocks, type TestGitRepo } from '../test/setup.js'
 
-// Mock credentials
-vi.mock('../lib/credentials.js', () => ({
-  resolveProvider: vi.fn(credentialsMocks.resolveProvider),
-  getApiKey: vi.fn(credentialsMocks.getApiKey)
+// Mock process.exit
+const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+  throw new Error('process.exit called')
+})
+
+// Mock console methods
+vi.spyOn(console, 'log').mockImplementation(() => {})
+vi.spyOn(console, 'error').mockImplementation(() => {})
+
+// Mock ora spinner
+vi.mock('ora', () => ({
+  default: vi.fn(() => ({
+    start: vi.fn().mockReturnThis(),
+    stop: vi.fn().mockReturnThis(),
+    fail: vi.fn().mockReturnThis(),
+    info: vi.fn().mockReturnThis(),
+    warn: vi.fn().mockReturnThis(),
+    succeed: vi.fn().mockReturnThis(),
+    text: ''
+  }))
 }))
 
-describe('sync command - git operations', () => {
-  let repo: TestGitRepo
-  let remoteRepo: TestGitRepo
+// Mock simple-git
+const mockGit = {
+  checkIsRepo: vi.fn(() => Promise.resolve(true)),
+  status: vi.fn(() =>
+    Promise.resolve({
+      isClean: (() => true) as () => boolean,
+      current: 'main',
+      tracking: 'origin/main' as string | null,
+      ahead: 0,
+      behind: 0,
+      modified: [] as string[],
+      not_added: [] as string[]
+    })
+  ),
+  fetch: vi.fn(() => Promise.resolve()),
+  rebase: vi.fn(() => Promise.resolve()),
+  merge: vi.fn(() => Promise.resolve()),
+  push: vi.fn(() => Promise.resolve()),
+  stash: vi.fn(() => Promise.resolve())
+}
 
-  beforeEach(async () => {
-    // Create a bare remote repository
-    remoteRepo = await createTestRepo('sync-remote')
+vi.mock('simple-git', () => ({
+  simpleGit: vi.fn(() => mockGit)
+}))
 
-    // Create local repository
-    repo = await createTestRepo('sync-local')
+// Import the command after mocks
+import { syncCommand } from './sync.js'
 
-    // Add remote (using local path as remote for testing)
-    await repo.git.addRemote('origin', remoteRepo.dir)
+describe('syncCommand', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGit.checkIsRepo.mockResolvedValue(true)
+    mockGit.status.mockResolvedValue({
+      isClean: (() => true) as () => boolean,
+      current: 'main',
+      tracking: 'origin/main' as string | null,
+      ahead: 0,
+      behind: 0,
+      modified: [] as string[],
+      not_added: [] as string[]
+    })
   })
 
   afterEach(() => {
-    repo.cleanup()
-    remoteRepo.cleanup()
     vi.clearAllMocks()
   })
 
-  describe('remote operations', () => {
-    it('should list remotes', async () => {
-      const remotes = await repo.git.getRemotes(true)
-      expect(remotes.map((r) => r.name)).toContain('origin')
+  describe('basic sync', () => {
+    it('should fetch and rebase by default', async () => {
+      await syncCommand.parseAsync([], { from: 'user' })
+
+      expect(mockGit.fetch).toHaveBeenCalledWith(['--all', '--prune'])
+      expect(mockGit.rebase).toHaveBeenCalledWith(['origin/main'])
     })
 
-    it('should check if branch has upstream', async () => {
-      const status = await repo.git.status()
-      // Initially no tracking
-      expect(status.tracking).toBeFalsy()
-    })
-  })
+    it('should use merge with --merge flag', async () => {
+      await syncCommand.parseAsync(['--merge'], { from: 'user' })
 
-  describe('stash before sync', () => {
-    it('should stash changes before sync', async () => {
-      repo.writeFile('uncommitted.ts', 'changes\n')
-
-      const status = await repo.git.status()
-      expect(status.not_added).toContain('uncommitted.ts')
-
-      await repo.git.stash(['push', '-u', '-m', 'sync-stash'])
-
-      const afterStatus = await repo.git.status()
-      expect(afterStatus.isClean()).toBe(true)
-    })
-
-    it('should restore stash after sync', async () => {
-      repo.writeFile('restore.ts', 'to restore\n')
-      await repo.git.stash(['push', '-u', '-m', 'to-restore'])
-
-      const stashList = await repo.git.stashList()
-      expect(stashList.all.length).toBe(1)
-
-      await repo.git.stash(['pop'])
-
-      const status = await repo.git.status()
-      expect(status.not_added).toContain('restore.ts')
+      expect(mockGit.fetch).toHaveBeenCalled()
+      expect(mockGit.merge).toHaveBeenCalledWith(['origin/main'])
     })
   })
 
-  describe('merge strategies', () => {
-    it('should support rebase', async () => {
-      // Create divergent history
-      repo.writeFile('local.ts', 'local\n')
-      await repo.git.add('local.ts')
-      await repo.git.commit('Local commit')
+  describe('uncommitted changes handling', () => {
+    it('should exit when there are uncommitted changes without --stash or --force', async () => {
+      mockGit.status.mockResolvedValue({
+        isClean: (() => false) as () => boolean,
+        current: 'main',
+        tracking: 'origin/main' as string | null,
+        ahead: 0,
+        behind: 0,
+        modified: ['file.ts'],
+        not_added: [] as string[]
+      })
 
-      // Rebase is configured but we test the config
-      await repo.git.addConfig('pull.rebase', 'true')
-      const config = await repo.git.listConfig()
-      expect(config.all['pull.rebase']).toBe('true')
+      await expect(syncCommand.parseAsync([], { from: 'user' })).rejects.toThrow(
+        'process.exit called'
+      )
+
+      expect(mockExit).toHaveBeenCalledWith(1)
     })
 
-    it('should support merge', async () => {
-      await repo.git.addConfig('pull.rebase', 'false')
-      const config = await repo.git.listConfig()
-      expect(config.all['pull.rebase']).toBe('false')
+    it('should stash changes with --stash flag', async () => {
+      mockGit.status
+        .mockResolvedValueOnce({
+          isClean: (() => false) as () => boolean,
+          current: 'main',
+          tracking: 'origin/main' as string | null,
+          ahead: 0,
+          behind: 0,
+          modified: ['file.ts'],
+          not_added: [] as string[]
+        })
+        .mockResolvedValue({
+          isClean: (() => true) as () => boolean,
+          current: 'main',
+          tracking: 'origin/main' as string | null,
+          ahead: 0,
+          behind: 0,
+          modified: [] as string[],
+          not_added: [] as string[]
+        })
+
+      await syncCommand.parseAsync(['--stash'], { from: 'user' })
+
+      expect(mockGit.stash).toHaveBeenCalledWith(['push', '-m', 'gut-sync: auto-stash before sync'])
+    })
+
+    it('should proceed with --force flag despite uncommitted changes', async () => {
+      mockGit.status.mockResolvedValue({
+        isClean: (() => false) as () => boolean,
+        current: 'main',
+        tracking: 'origin/main' as string | null,
+        ahead: 0,
+        behind: 0,
+        modified: ['file.ts'],
+        not_added: [] as string[]
+      })
+
+      await syncCommand.parseAsync(['--force'], { from: 'user' })
+
+      expect(mockGit.fetch).toHaveBeenCalled()
     })
   })
 
-  describe('branch tracking', () => {
-    it('should set upstream when pushing', async () => {
-      // This would require a real remote, but we can test the command structure
-      const branches = await repo.git.branchLocal()
-      expect(branches.current).toBe('main')
+  describe('push behavior', () => {
+    it('should push when ahead of remote', async () => {
+      mockGit.status
+        .mockResolvedValueOnce({
+          isClean: (() => true) as () => boolean,
+          current: 'main',
+          tracking: 'origin/main' as string | null,
+          ahead: 0,
+          behind: 0,
+          modified: [] as string[],
+          not_added: [] as string[]
+        })
+        .mockResolvedValue({
+          isClean: (() => true) as () => boolean,
+          current: 'main',
+          tracking: 'origin/main' as string | null,
+          ahead: 2,
+          behind: 0,
+          modified: [] as string[],
+          not_added: [] as string[]
+        })
+
+      await syncCommand.parseAsync([], { from: 'user' })
+
+      expect(mockGit.push).toHaveBeenCalled()
+    })
+
+    it('should not push with --no-push flag', async () => {
+      mockGit.status
+        .mockResolvedValueOnce({
+          isClean: (() => true) as () => boolean,
+          current: 'main',
+          tracking: 'origin/main' as string | null,
+          ahead: 0,
+          behind: 0,
+          modified: [] as string[],
+          not_added: [] as string[]
+        })
+        .mockResolvedValue({
+          isClean: (() => true) as () => boolean,
+          current: 'main',
+          tracking: 'origin/main' as string | null,
+          ahead: 2,
+          behind: 0,
+          modified: [] as string[],
+          not_added: [] as string[]
+        })
+
+      await syncCommand.parseAsync(['--no-push'], { from: 'user' })
+
+      expect(mockGit.push).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('no upstream branch', () => {
+    it('should warn when branch has no upstream', async () => {
+      mockGit.status.mockResolvedValue({
+        isClean: (() => true) as () => boolean,
+        current: 'feature/new',
+        tracking: null as string | null,
+        ahead: 0,
+        behind: 0,
+        modified: [] as string[],
+        not_added: [] as string[]
+      })
+
+      await syncCommand.parseAsync([], { from: 'user' })
+
+      // Should not try to rebase or merge without tracking branch
+      expect(mockGit.rebase).not.toHaveBeenCalled()
+      expect(mockGit.merge).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('error handling', () => {
+    it('should exit when not in a git repository', async () => {
+      mockGit.checkIsRepo.mockResolvedValue(false)
+
+      await expect(syncCommand.parseAsync([], { from: 'user' })).rejects.toThrow(
+        'process.exit called'
+      )
+
+      expect(mockExit).toHaveBeenCalledWith(1)
     })
   })
 })

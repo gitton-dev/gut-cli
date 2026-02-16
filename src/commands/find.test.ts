@@ -1,5 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { aiMocks, createTestRepo, credentialsMocks, type TestGitRepo } from '../test/setup.js'
+
+// Mock process.exit
+const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+  throw new Error('process.exit called')
+})
+
+// Mock console methods
+vi.spyOn(console, 'log').mockImplementation(() => {})
+vi.spyOn(console, 'error').mockImplementation(() => {})
+
+// Mock ora spinner
+vi.mock('ora', () => ({
+  default: vi.fn(() => ({
+    start: vi.fn().mockReturnThis(),
+    stop: vi.fn().mockReturnThis(),
+    fail: vi.fn().mockReturnThis(),
+    info: vi.fn().mockReturnThis(),
+    text: ''
+  }))
+}))
 
 // Mock AI module
 vi.mock('../lib/ai.js', () => ({
@@ -19,107 +38,151 @@ vi.mock('../lib/ai.js', () => ({
       summary: 'Found 1 matching commit'
     })
   ),
-  findTemplate: vi.fn(aiMocks.findTemplate)
+  findTemplate: vi.fn(() => null)
 }))
 
 // Mock credentials
 vi.mock('../lib/credentials.js', () => ({
-  resolveProvider: vi.fn(credentialsMocks.resolveProvider),
-  getApiKey: vi.fn(credentialsMocks.getApiKey)
+  resolveProvider: vi.fn(() => Promise.resolve('gemini')),
+  getApiKey: vi.fn(() => 'test-api-key'),
+  Provider: {}
 }))
 
-import { searchCommits } from '../lib/ai.js'
+// Mock config
+vi.mock('../lib/config.js', () => ({
+  getConfiguredModel: vi.fn(() => undefined),
+  getDefaultModel: vi.fn(() => 'gemini-2.5-flash')
+}))
 
-describe('find command - git operations', () => {
-  let repo: TestGitRepo
-
-  beforeEach(async () => {
-    repo = await createTestRepo('find')
-  })
-
-  afterEach(() => {
-    repo.cleanup()
-    vi.clearAllMocks()
-  })
-
-  describe('commit history retrieval', () => {
-    it('should get commit log', async () => {
-      repo.writeFile('file1.ts', 'a\n')
-      await repo.git.add('file1.ts')
-      await repo.git.commit('feat: add file1')
-
-      repo.writeFile('file2.ts', 'b\n')
-      await repo.git.add('file2.ts')
-      await repo.git.commit('fix: bug in file1')
-
-      const log = await repo.git.log({ maxCount: 10 })
-      expect(log.all.length).toBe(3) // Including initial commit
-    })
-
-    it('should filter by author', async () => {
-      const log = await repo.git.log({ '--author': 'Test User' })
-      expect(log.all.length).toBeGreaterThan(0)
-      expect(log.all.every((c) => c.author_name === 'Test User')).toBe(true)
-    })
-
-    it('should filter by date', async () => {
-      const log = await repo.git.log({ '--since': '1 week ago' })
-      expect(log.all.length).toBeGreaterThan(0)
-    })
-
-    it('should filter by path', async () => {
-      repo.writeFile('src/feature.ts', 'feature\n')
-      await repo.git.add('src/feature.ts')
-      await repo.git.commit('feat: add feature in src')
-
-      repo.writeFile('docs/readme.md', 'docs\n')
-      await repo.git.add('docs/readme.md')
-      await repo.git.commit('docs: update readme')
-
-      const log = await repo.git.log({ file: 'src/' })
-      const messages = log.all.map((c) => c.message)
-      expect(messages).toContain('feat: add feature in src')
-      expect(messages).not.toContain('docs: update readme')
-    })
-  })
-
-  describe('commit search', () => {
-    it('should search commits with AI', async () => {
-      const commits = [
+// Mock simple-git
+const mockGit = {
+  checkIsRepo: vi.fn(() => Promise.resolve(true)),
+  revparse: vi.fn(() => Promise.resolve('/test/repo')),
+  log: vi.fn(() =>
+    Promise.resolve({
+      all: [
         {
           hash: 'abc123',
           message: 'feat: add login',
-          author: 'test',
-          email: 'test@test.com',
+          author_name: 'Test',
+          author_email: 'test@test.com',
           date: '2024-01-01'
         },
         {
           hash: 'def456',
           message: 'fix: auth bug',
-          author: 'test',
-          email: 'test@test.com',
+          author_name: 'Test',
+          author_email: 'test@test.com',
           date: '2024-01-02'
         }
       ]
+    })
+  )
+}
 
-      const result = await searchCommits('login feature', commits, { provider: 'gemini' }, 5)
+vi.mock('simple-git', () => ({
+  simpleGit: vi.fn(() => mockGit)
+}))
 
-      expect(result.matches).toHaveLength(1)
-      expect(result.matches[0].reason).toContain('login')
+// Import the command after mocks
+import { findCommand } from './find.js'
+
+describe('findCommand', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGit.checkIsRepo.mockResolvedValue(true)
+    mockGit.log.mockResolvedValue({
+      all: [
+        {
+          hash: 'abc123',
+          message: 'feat: add login',
+          author_name: 'Test',
+          author_email: 'test@test.com',
+          date: '2024-01-01'
+        }
+      ]
     })
   })
 
-  describe('commit details', () => {
-    it('should get commit details by hash', async () => {
-      repo.writeFile('detail.ts', 'detail\n')
-      await repo.git.add('detail.ts')
-      await repo.git.commit('feat: detailed commit')
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
 
-      const log = await repo.git.log({ maxCount: 1 })
-      const hash = log.latest?.hash
+  describe('commit search', () => {
+    it('should search commits with given query', async () => {
+      await findCommand.parseAsync(['login feature'], { from: 'user' })
 
-      const show = await repo.git.show([hash!, '--stat', '--format=%H|%an|%ae|%s'])
-      expect(show).toContain(hash)
+      expect(mockGit.log).toHaveBeenCalled()
+    })
+
+    it('should limit number of commits searched with -n option', async () => {
+      await findCommand.parseAsync(['search query', '-n', '50'], { from: 'user' })
+
+      expect(mockGit.log).toHaveBeenCalledWith(expect.arrayContaining(['-n', '50']))
+    })
+
+    it('should filter by author with --author option', async () => {
+      await findCommand.parseAsync(['search query', '--author', 'john'], { from: 'user' })
+
+      expect(mockGit.log).toHaveBeenCalledWith(expect.arrayContaining(['--author=john']))
+    })
+
+    it('should filter by date with --since option', async () => {
+      await findCommand.parseAsync(['search query', '--since', '2024-01-01'], { from: 'user' })
+
+      expect(mockGit.log).toHaveBeenCalledWith(expect.arrayContaining(['--since=2024-01-01']))
+    })
+
+    it('should filter by path with --path option', async () => {
+      await findCommand.parseAsync(['search query', '--path', 'src/'], { from: 'user' })
+
+      expect(mockGit.log).toHaveBeenCalledWith(expect.arrayContaining(['--', 'src/']))
+    })
+  })
+
+  describe('output formats', () => {
+    it('should output JSON with --json flag', async () => {
+      const consoleSpy = vi.spyOn(console, 'log')
+
+      await findCommand.parseAsync(['query', '--json'], { from: 'user' })
+
+      const calls = consoleSpy.mock.calls
+      const jsonCall = calls.find(
+        (call) => typeof call[0] === 'string' && call[0].includes('matches')
+      )
+      expect(jsonCall).toBeDefined()
+    })
+  })
+
+  describe('error handling', () => {
+    it('should exit when not in a git repository', async () => {
+      mockGit.checkIsRepo.mockResolvedValue(false)
+
+      await expect(findCommand.parseAsync(['query'], { from: 'user' })).rejects.toThrow(
+        'process.exit called'
+      )
+
+      expect(mockExit).toHaveBeenCalledWith(1)
+    })
+
+    it('should exit when no commits found', async () => {
+      mockGit.log.mockResolvedValue({ all: [] })
+
+      await expect(findCommand.parseAsync(['query'], { from: 'user' })).rejects.toThrow(
+        'process.exit called'
+      )
+
+      expect(mockExit).toHaveBeenCalledWith(1)
+    })
+  })
+
+  describe('provider selection', () => {
+    it('should use specified provider', async () => {
+      const { resolveProvider } = await import('../lib/credentials.js')
+
+      await findCommand.parseAsync(['query', '-p', 'anthropic'], { from: 'user' })
+
+      expect(resolveProvider).toHaveBeenCalledWith('anthropic')
     })
   })
 })

@@ -1,137 +1,202 @@
+import { MockLanguageModelV1 } from 'ai/test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { aiMocks, createTestRepo, credentialsMocks, type TestGitRepo } from '../test/setup.js'
 
-// Mock AI module
-vi.mock('../lib/ai.js', () => ({
-  resolveConflict: vi.fn(() =>
-    Promise.resolve({
-      resolvedContent: 'merged content',
-      explanation: 'Combined both changes',
-      strategy: 'combined'
-    })
-  ),
-  findTemplate: vi.fn(aiMocks.findTemplate)
+// Mock process.exit
+const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+  throw new Error('process.exit called')
+})
+
+// Mock console methods
+vi.spyOn(console, 'log').mockImplementation(() => {})
+vi.spyOn(console, 'error').mockImplementation(() => {})
+
+// Mock ora spinner
+vi.mock('ora', () => ({
+  default: vi.fn(() => ({
+    start: vi.fn().mockReturnThis(),
+    stop: vi.fn().mockReturnThis(),
+    fail: vi.fn().mockReturnThis(),
+    info: vi.fn().mockReturnThis(),
+    text: ''
+  }))
+}))
+
+// Mock fs
+vi.mock('node:fs', () => ({
+  existsSync: vi.fn(() => true),
+  readFileSync: vi.fn(() => '<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch'),
+  writeFileSync: vi.fn()
+}))
+
+// Mock readline for prompts
+vi.mock('node:readline', () => ({
+  createInterface: vi.fn(() => ({
+    question: vi.fn((_, cb) => cb('y')),
+    close: vi.fn()
+  }))
+}))
+
+// Create mock model
+const mockModel = new MockLanguageModelV1({
+  doGenerate: async () => ({
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop' as const,
+    usage: { promptTokens: 10, completionTokens: 20 },
+    text: ''
+  })
+})
+
+// Mock AI SDK
+vi.mock('ai', async () => {
+  const actual = await vi.importActual('ai')
+  return {
+    ...actual,
+    generateObject: vi.fn(async () => ({
+      object: {
+        resolvedContent: 'merged content',
+        explanation: 'Combined both changes',
+        strategy: 'combined'
+      }
+    }))
+  }
+})
+
+// Mock provider SDKs
+vi.mock('@ai-sdk/google', () => ({
+  createGoogleGenerativeAI: vi.fn(() => () => mockModel)
 }))
 
 // Mock credentials
 vi.mock('../lib/credentials.js', () => ({
-  resolveProvider: vi.fn(credentialsMocks.resolveProvider),
-  getApiKey: vi.fn(credentialsMocks.getApiKey)
+  resolveProvider: vi.fn(() => Promise.resolve('gemini')),
+  getApiKey: vi.fn(() => 'test-api-key'),
+  Provider: {}
 }))
 
-describe('merge command - git operations', () => {
-  let repo: TestGitRepo
+// Mock config
+vi.mock('../lib/config.js', () => ({
+  getConfiguredModel: vi.fn(() => undefined),
+  getDefaultModel: vi.fn(() => 'gemini-2.5-flash')
+}))
 
-  beforeEach(async () => {
-    repo = await createTestRepo('merge')
+// Mock simple-git
+const mockGit = {
+  checkIsRepo: vi.fn(() => Promise.resolve(true)),
+  revparse: vi.fn(() => Promise.resolve('/test/repo')),
+  status: vi.fn(() =>
+    Promise.resolve({
+      modified: [] as string[],
+      staged: [] as string[],
+      conflicted: [] as string[]
+    })
+  ),
+  branch: vi.fn(() => Promise.resolve({ current: 'main' })),
+  merge: vi.fn(() => Promise.resolve()),
+  add: vi.fn(() => Promise.resolve()),
+  commit: vi.fn(() => Promise.resolve())
+}
+
+vi.mock('simple-git', () => ({
+  simpleGit: vi.fn(() => mockGit)
+}))
+
+// Import the command after mocks
+import { mergeCommand } from './merge.js'
+
+describe('mergeCommand', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGit.checkIsRepo.mockResolvedValue(true)
+    mockGit.status.mockResolvedValue({
+      modified: [],
+      staged: [],
+      conflicted: []
+    })
   })
 
   afterEach(() => {
-    repo.cleanup()
     vi.clearAllMocks()
   })
 
-  describe('simple merge (no conflicts)', () => {
+  describe('simple merge', () => {
     it('should merge branch without conflicts', async () => {
-      // Create feature branch with changes
-      await repo.git.checkoutLocalBranch('feature/simple')
-      repo.writeFile('feature.ts', 'export const feature = true;\n')
-      await repo.git.add('feature.ts')
-      await repo.git.commit('Add feature')
+      await mergeCommand.parseAsync(['feature/test'], { from: 'user' })
 
-      // Switch back to main and merge (use --no-ff to create merge commit)
-      await repo.git.checkout('main')
-      await repo.git.merge(['feature/simple', '--no-ff'])
-
-      // Verify merge
-      const log = await repo.git.log({ maxCount: 1 })
-      expect(log.latest?.message).toContain('Merge')
-    })
-
-    it('should fast-forward merge when possible', async () => {
-      // Create feature branch
-      await repo.git.checkoutLocalBranch('feature/ff')
-      repo.writeFile('ff.ts', 'fast forward\n')
-      await repo.git.add('ff.ts')
-      await repo.git.commit('FF commit')
-
-      // Switch to main (no changes since branch)
-      await repo.git.checkout('main')
-
-      // Fast-forward merge
-      await repo.git.merge(['feature/ff', '--ff-only'])
-
-      const log = await repo.git.log({ maxCount: 1 })
-      expect(log.latest?.message).toBe('FF commit')
+      expect(mockGit.merge).toHaveBeenCalledWith(['feature/test'])
     })
   })
 
   describe('merge with conflicts', () => {
-    it('should detect conflicts', async () => {
-      // Create conflicting changes
-      await repo.git.checkoutLocalBranch('feature/conflict')
-      repo.writeFile('README.md', '# Feature branch\n')
-      await repo.git.add('README.md')
-      await repo.git.commit('Update README on feature')
+    it('should detect and attempt AI resolution for conflicts', async () => {
+      // First merge fails, then status shows conflicts
+      mockGit.merge.mockRejectedValueOnce(new Error('Merge conflict'))
+      mockGit.status
+        .mockResolvedValueOnce({ modified: [], staged: [], conflicted: [] }) // Initial check
+        .mockResolvedValueOnce({ modified: [], staged: [], conflicted: ['file.ts'] }) // After failed merge
+        .mockResolvedValueOnce({ modified: [], staged: [], conflicted: [] }) // Final check
 
-      await repo.git.checkout('main')
-      repo.writeFile('README.md', '# Main branch\n')
-      await repo.git.add('README.md')
-      await repo.git.commit('Update README on main')
+      await mergeCommand.parseAsync(['feature/conflict'], { from: 'user' })
 
-      // Attempt merge - should fail
-      try {
-        await repo.git.merge(['feature/conflict'])
-      } catch {
-        // Expected to fail
-      }
-
-      const status = await repo.git.status()
-      expect(status.conflicted).toContain('README.md')
-    })
-
-    it('should abort merge', async () => {
-      // Create conflict
-      await repo.git.checkoutLocalBranch('feature/abort')
-      repo.writeFile('README.md', '# Abort test\n')
-      await repo.git.add('README.md')
-      await repo.git.commit('Abort test commit')
-
-      await repo.git.checkout('main')
-      repo.writeFile('README.md', '# Main abort\n')
-      await repo.git.add('README.md')
-      await repo.git.commit('Main abort commit')
-
-      try {
-        await repo.git.merge(['feature/abort'])
-      } catch {
-        // Expected
-      }
-
-      // Abort merge
-      await repo.git.merge(['--abort'])
-
-      const status = await repo.git.status()
-      expect(status.conflicted).toHaveLength(0)
+      expect(mockGit.merge).toHaveBeenCalledWith(['feature/conflict'])
     })
   })
 
-  describe('merge strategies', () => {
-    it('should use ours strategy', async () => {
-      await repo.git.checkoutLocalBranch('feature/ours')
-      repo.writeFile('ours.ts', 'feature version\n')
-      await repo.git.add('ours.ts')
-      await repo.git.commit('Feature ours')
+  describe('uncommitted changes check', () => {
+    it('should exit when there are uncommitted changes', async () => {
+      mockGit.status.mockResolvedValue({
+        modified: ['file.ts'],
+        staged: [],
+        conflicted: []
+      })
 
-      await repo.git.checkout('main')
-      repo.writeFile('ours.ts', 'main version\n')
-      await repo.git.add('ours.ts')
-      await repo.git.commit('Main ours')
+      await expect(mergeCommand.parseAsync(['feature/test'], { from: 'user' })).rejects.toThrow(
+        'process.exit called'
+      )
 
-      await repo.git.merge(['feature/ours', '-X', 'ours'])
+      expect(mockExit).toHaveBeenCalledWith(1)
+    })
+  })
 
-      const status = await repo.git.status()
-      expect(status.isClean()).toBe(true)
+  describe('--no-commit option', () => {
+    it('should not auto-commit when --no-commit is used', async () => {
+      mockGit.merge.mockRejectedValueOnce(new Error('conflict'))
+      mockGit.status
+        .mockResolvedValueOnce({ modified: [], staged: [], conflicted: [] })
+        .mockResolvedValueOnce({ modified: [], staged: [], conflicted: ['file.ts'] })
+        .mockResolvedValueOnce({ modified: [], staged: [], conflicted: [] })
+
+      await mergeCommand.parseAsync(['feature/test', '--no-commit'], { from: 'user' })
+
+      // commit should not be called due to --no-commit
+      expect(mockGit.commit).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('error handling', () => {
+    it('should exit when not in a git repository', async () => {
+      mockGit.checkIsRepo.mockResolvedValue(false)
+
+      await expect(mergeCommand.parseAsync(['feature/test'], { from: 'user' })).rejects.toThrow(
+        'process.exit called'
+      )
+
+      expect(mockExit).toHaveBeenCalledWith(1)
+    })
+  })
+
+  describe('provider selection', () => {
+    it('should use specified provider for conflict resolution', async () => {
+      const { resolveProvider } = await import('../lib/credentials.js')
+
+      mockGit.merge.mockRejectedValueOnce(new Error('conflict'))
+      mockGit.status
+        .mockResolvedValueOnce({ modified: [], staged: [], conflicted: [] })
+        .mockResolvedValueOnce({ modified: [], staged: [], conflicted: ['file.ts'] })
+        .mockResolvedValueOnce({ modified: [], staged: [], conflicted: [] })
+
+      await mergeCommand.parseAsync(['feature/test', '-p', 'anthropic'], { from: 'user' })
+
+      expect(resolveProvider).toHaveBeenCalledWith('anthropic')
     })
   })
 })

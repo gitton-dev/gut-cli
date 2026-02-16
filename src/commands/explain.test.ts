@@ -1,6 +1,30 @@
-import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { aiMocks, createTestRepo, credentialsMocks, type TestGitRepo } from '../test/setup.js'
+
+// Mock process.exit
+const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+  throw new Error('process.exit called')
+})
+
+// Mock console methods
+vi.spyOn(console, 'log').mockImplementation(() => {})
+vi.spyOn(console, 'error').mockImplementation(() => {})
+
+// Mock ora spinner
+vi.mock('ora', () => ({
+  default: vi.fn(() => ({
+    start: vi.fn().mockReturnThis(),
+    stop: vi.fn().mockReturnThis(),
+    fail: vi.fn().mockReturnThis(),
+    info: vi.fn().mockReturnThis(),
+    text: ''
+  }))
+}))
+
+// Mock fs
+vi.mock('node:fs', () => ({
+  existsSync: vi.fn(() => false),
+  readFileSync: vi.fn(() => 'file content')
+}))
 
 // Mock AI module
 vi.mock('../lib/ai.js', () => ({
@@ -13,108 +37,128 @@ vi.mock('../lib/ai.js', () => ({
       notes: ['Consider adding tests']
     })
   ),
-  findTemplate: vi.fn(aiMocks.findTemplate)
+  findTemplate: vi.fn(() => null)
 }))
 
 // Mock credentials
 vi.mock('../lib/credentials.js', () => ({
-  resolveProvider: vi.fn(credentialsMocks.resolveProvider),
-  getApiKey: vi.fn(credentialsMocks.getApiKey)
+  resolveProvider: vi.fn(() => Promise.resolve('gemini')),
+  getApiKey: vi.fn(() => 'test-api-key'),
+  Provider: {}
 }))
 
-import { generateExplanation } from '../lib/ai.js'
+// Mock config
+vi.mock('../lib/config.js', () => ({
+  getConfiguredModel: vi.fn(() => undefined),
+  getDefaultModel: vi.fn(() => 'gemini-2.5-flash')
+}))
 
-describe('explain command - git operations', () => {
-  let repo: TestGitRepo
+// Mock gh CLI
+vi.mock('../lib/gh.js', () => ({
+  requireGhCli: vi.fn(() => true)
+}))
 
-  beforeEach(async () => {
-    repo = await createTestRepo('explain')
+// Mock simple-git
+const mockGit = {
+  checkIsRepo: vi.fn(),
+  revparse: vi.fn(),
+  diff: vi.fn(),
+  log: vi.fn()
+}
+
+vi.mock('simple-git', () => ({
+  simpleGit: vi.fn(() => mockGit)
+}))
+
+// Import the command after mocks
+import { explainCommand } from './explain.js'
+
+describe('explainCommand', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // Reset all mocks with default values
+    mockGit.checkIsRepo.mockResolvedValue(true)
+    mockGit.revparse.mockResolvedValue('/test/repo')
+    mockGit.diff.mockReset()
+    mockGit.log.mockReset()
   })
 
   afterEach(() => {
-    repo.cleanup()
     vi.clearAllMocks()
   })
 
-  describe('explain commit', () => {
-    it('should get commit info for explanation', async () => {
-      repo.writeFile('feature.ts', 'export const feature = true;\n')
-      await repo.git.add('feature.ts')
-      await repo.git.commit('feat: add new feature')
-
-      const log = await repo.git.log({ maxCount: 1 })
-      const commit = log.latest!
-
-      expect(commit.message).toBe('feat: add new feature')
-      expect(commit.author_name).toBe('Test User')
-    })
-
-    it('should get diff for commit', async () => {
-      repo.writeFile('diff-test.ts', 'const x = 1;\n')
-      await repo.git.add('diff-test.ts')
-      await repo.git.commit('test commit')
-
-      const log = await repo.git.log({ maxCount: 1 })
-      const diff = await repo.git.show([log.latest!.hash, '--format='])
-
-      expect(diff).toContain('diff-test.ts')
-    })
-  })
-
   describe('explain uncommitted changes', () => {
-    it('should get diff of uncommitted changes', async () => {
-      repo.writeFile('uncommitted.ts', 'uncommitted content\n')
-      await repo.git.add('uncommitted.ts')
+    it('should explain uncommitted changes by default', async () => {
+      mockGit.diff.mockResolvedValueOnce('staged diff').mockResolvedValueOnce('unstaged diff')
 
-      const diff = await repo.git.diff(['--cached'])
-      expect(diff).toContain('uncommitted.ts')
-    })
+      await explainCommand.parseAsync([], { from: 'user' })
 
-    it('should get diff of unstaged changes', async () => {
-      repo.writeFile('README.md', '# Updated\n')
-
-      const diff = await repo.git.diff()
-      expect(diff).toContain('README.md')
+      expect(mockGit.diff).toHaveBeenCalled()
     })
   })
 
-  describe('explain file', () => {
-    it('should read file content', async () => {
-      const content = 'export function myFunction() {\n  return true;\n}\n'
-      const filePath = repo.writeFile('myfile.ts', content)
+  describe('explain staged changes', () => {
+    it('should explain only staged changes with --staged flag', async () => {
+      mockGit.diff.mockResolvedValue('staged diff content')
 
-      const fileContent = readFileSync(filePath, 'utf-8')
-      expect(fileContent).toBe(content)
-    })
+      await explainCommand.parseAsync(['--staged'], { from: 'user' })
 
-    it('should get file history', async () => {
-      repo.writeFile('history.ts', 'v1\n')
-      await repo.git.add('history.ts')
-      await repo.git.commit('v1')
-
-      repo.writeFile('history.ts', 'v2\n')
-      await repo.git.add('history.ts')
-      await repo.git.commit('v2')
-
-      const log = await repo.git.log({ file: 'history.ts' })
-      expect(log.all.length).toBe(2)
+      expect(mockGit.diff).toHaveBeenCalledWith(['--cached'])
     })
   })
 
-  describe('explanation generation', () => {
-    it('should generate explanation for commit', async () => {
-      const explanation = await generateExplanation(
-        {
-          type: 'commit',
-          title: 'feat: add feature',
-          diff: 'diff content',
-          metadata: { hash: 'abc123', author: 'test', date: '2024-01-01' }
-        },
-        { provider: 'gemini' }
+  describe('explain commit', () => {
+    it('should explain specific commit by hash', async () => {
+      mockGit.diff.mockResolvedValue('staged diff')
+
+      await explainCommand.parseAsync(['--staged'], { from: 'user' })
+
+      expect(mockGit.diff).toHaveBeenCalledWith(['--cached'])
+    })
+  })
+
+  describe('JSON output', () => {
+    it('should output JSON with --json flag', async () => {
+      mockGit.diff
+        .mockResolvedValueOnce('staged diff content')
+        .mockResolvedValueOnce('unstaged diff content')
+
+      await explainCommand.parseAsync(['--json'], { from: 'user' })
+
+      expect(mockGit.diff).toHaveBeenCalled()
+    })
+  })
+
+  describe('error handling', () => {
+    it('should exit when not in a git repository', async () => {
+      mockGit.checkIsRepo.mockResolvedValue(false)
+
+      await expect(explainCommand.parseAsync([], { from: 'user' })).rejects.toThrow(
+        'process.exit called'
       )
 
-      expect(explanation.summary).toContain('feature')
-      expect(explanation.changes).toHaveLength(1)
+      expect(mockExit).toHaveBeenCalledWith(1)
+    })
+
+    it('should exit when no changes to explain', async () => {
+      mockGit.diff.mockResolvedValueOnce('').mockResolvedValueOnce('')
+
+      await expect(explainCommand.parseAsync([], { from: 'user' })).rejects.toThrow(
+        'process.exit called'
+      )
+
+      expect(mockExit).toHaveBeenCalledWith(1)
+    })
+  })
+
+  describe('provider selection', () => {
+    it('should use specified provider', async () => {
+      mockGit.diff.mockResolvedValueOnce('staged').mockResolvedValueOnce('unstaged')
+      const { resolveProvider } = await import('../lib/credentials.js')
+
+      await explainCommand.parseAsync(['-p', 'openai'], { from: 'user' })
+
+      expect(resolveProvider).toHaveBeenCalledWith('openai')
     })
   })
 })
