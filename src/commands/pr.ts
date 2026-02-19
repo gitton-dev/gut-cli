@@ -7,7 +7,7 @@ import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { findTemplate, generatePRDescription } from '../lib/ai.js'
 import { resolveProvider } from '../lib/credentials.js'
-import { isGhCliInstalled } from '../lib/gh.js'
+import { getDefaultBranch, isGhCliInstalled } from '../lib/gh.js'
 
 // GitHub's conventional PR template paths (prioritized)
 const GITHUB_PR_TEMPLATE_PATHS = [
@@ -59,7 +59,11 @@ export const prCommand = new Command('pr')
       // Detect base branch
       let baseBranch = options.base
       if (!baseBranch) {
-        if (branchInfo.all.includes('main')) {
+        // Try to get default branch from GitHub
+        const ghDefaultBranch = getDefaultBranch()
+        if (ghDefaultBranch) {
+          baseBranch = ghDefaultBranch
+        } else if (branchInfo.all.includes('main')) {
           baseBranch = 'main'
         } else if (branchInfo.all.includes('master')) {
           baseBranch = 'master'

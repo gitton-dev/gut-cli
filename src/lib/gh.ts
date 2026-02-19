@@ -31,3 +31,18 @@ export function requireGhCli(): boolean {
   }
   return true
 }
+
+export function getDefaultBranch(): string | null {
+  if (!isGhCliInstalled()) {
+    return null
+  }
+  try {
+    const result = execSync('gh repo view --json defaultBranchRef --jq ".defaultBranchRef.name"', {
+      stdio: ['pipe', 'pipe', 'pipe']
+    })
+    const branch = result.toString().trim()
+    return branch || null
+  } catch {
+    return null
+  }
+}
