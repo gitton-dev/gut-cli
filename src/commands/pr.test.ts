@@ -81,7 +81,8 @@ vi.mock('../lib/config.js', () => ({
 // Mock gh CLI check
 vi.mock('../lib/gh.js', () => ({
   isGhCliInstalled: vi.fn(() => false),
-  getDefaultBranch: vi.fn(() => null)
+  getDefaultBranch: vi.fn(() => null),
+  getExistingPrUrl: vi.fn(() => null)
 }))
 
 // Mock simple-git
@@ -234,6 +235,44 @@ describe('prCommand', () => {
       // Verify PR URL was displayed
       const urlCall = consoleSpy.mock.calls.find(
         (call) => typeof call[0] === 'string' && call[0].includes(prUrl)
+      )
+      expect(urlCall).toBeDefined()
+    })
+
+    it('should update existing PR instead of creating new one', async () => {
+      const { isGhCliInstalled, getExistingPrUrl } = await import('../lib/gh.js')
+      const { execSync } = await import('node:child_process')
+      const readline = await import('node:readline')
+
+      // Mock gh CLI as installed
+      vi.mocked(isGhCliInstalled).mockReturnValue(true)
+
+      // Mock existing PR
+      const existingPrUrl = 'https://github.com/owner/repo/pull/456'
+      vi.mocked(getExistingPrUrl).mockReturnValue(existingPrUrl)
+
+      // Mock user confirms PR update
+      vi.mocked(readline.createInterface).mockReturnValue({
+        question: vi.fn((_prompt: string, callback: (answer: string) => void) => callback('y')),
+        close: vi.fn()
+      } as unknown as ReturnType<typeof readline.createInterface>)
+
+      // Mock gh pr edit
+      vi.mocked(execSync).mockReturnValue(Buffer.from(''))
+
+      const consoleSpy = vi.spyOn(console, 'log')
+
+      await prCommand.parseAsync([], { from: 'user' })
+
+      // Verify gh pr edit was called (not create)
+      expect(execSync).toHaveBeenCalledWith(
+        expect.stringContaining('gh pr edit'),
+        expect.any(Object)
+      )
+
+      // Verify existing PR URL was displayed
+      const urlCall = consoleSpy.mock.calls.find(
+        (call) => typeof call[0] === 'string' && call[0].includes(existingPrUrl)
       )
       expect(urlCall).toBeDefined()
     })

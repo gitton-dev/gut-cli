@@ -46,3 +46,18 @@ export function getDefaultBranch(): string | null {
     return null
   }
 }
+
+export function getExistingPrUrl(): string | null {
+  if (!isGhCliInstalled()) {
+    return null
+  }
+  try {
+    const result = execSync('gh pr view --json url --jq ".url"', {
+      stdio: ['pipe', 'pipe', 'pipe']
+    })
+    const url = result.toString().trim()
+    return url || null
+  } catch {
+    return null
+  }
+}

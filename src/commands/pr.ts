@@ -7,7 +7,7 @@ import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { findTemplate, generatePRDescription } from '../lib/ai.js'
 import { resolveProvider } from '../lib/credentials.js'
-import { getDefaultBranch, isGhCliInstalled } from '../lib/gh.js'
+import { getDefaultBranch, getExistingPrUrl, isGhCliInstalled } from '../lib/gh.js'
 
 // GitHub's conventional PR template paths (prioritized)
 const GITHUB_PR_TEMPLATE_PATHS = [
@@ -143,16 +143,25 @@ export const prCommand = new Command('pr')
           console.log(chalk.gray('\nTip: Use --copy to copy to clipboard'))
         }
       } else {
-        // Always ask about creating PR
+        // Check if PR already exists for this branch
+        const existingPrUrl = getExistingPrUrl()
+        const isUpdate = !!existingPrUrl
+
+        // Always ask about creating/updating PR
         const readline = await import('node:readline')
         const rl = readline.createInterface({
           input: process.stdin,
           output: process.stdout
         })
 
-        const promptMessage = options.create
-          ? chalk.cyan('\nCreate PR with this description? (y/N) ')
-          : chalk.cyan('\nCreate PR with gh CLI? (y/N) ')
+        let promptMessage: string
+        if (isUpdate) {
+          promptMessage = chalk.cyan(`\nUpdate existing PR? (${existingPrUrl}) (y/N) `)
+        } else if (options.create) {
+          promptMessage = chalk.cyan('\nCreate PR with this description? (y/N) ')
+        } else {
+          promptMessage = chalk.cyan('\nCreate PR with gh CLI? (y/N) ')
+        }
 
         const answer = await new Promise<string>((resolve) => {
           rl.question(promptMessage, resolve)
@@ -160,7 +169,7 @@ export const prCommand = new Command('pr')
         rl.close()
 
         if (answer.toLowerCase() === 'y') {
-          const createSpinner = ora('Creating PR...').start()
+          const actionSpinner = ora(isUpdate ? 'Updating PR...' : 'Creating PR...').start()
           try {
             // Escape quotes and backticks in title for shell safety
             const escapedTitle = title
@@ -168,21 +177,32 @@ export const prCommand = new Command('pr')
               .replace(/`/g, '\\`')
               .replace(/\$/g, '\\$')
 
-            // Use --body-file - to pass body via stdin (avoids shell escaping issues)
-            const result = execSync(
-              `gh pr create --title "${escapedTitle}" --body-file - --base ${baseBranch}`,
-              {
+            let prUrl: string
+            if (isUpdate) {
+              // Update existing PR
+              execSync(`gh pr edit --title "${escapedTitle}" --body-file -`, {
                 stdio: ['pipe', 'pipe', 'pipe'],
                 input: body
-              }
-            )
-            const prUrl = result.toString().trim()
-            createSpinner.succeed('PR created successfully!')
+              })
+              prUrl = existingPrUrl
+              actionSpinner.succeed('PR updated successfully!')
+            } else {
+              // Create new PR
+              const result = execSync(
+                `gh pr create --title "${escapedTitle}" --body-file - --base ${baseBranch}`,
+                {
+                  stdio: ['pipe', 'pipe', 'pipe'],
+                  input: body
+                }
+              )
+              prUrl = result.toString().trim()
+              actionSpinner.succeed('PR created successfully!')
+            }
             if (prUrl) {
               console.log(chalk.green(`\n🔗 ${prUrl}`))
             }
           } catch (err) {
-            createSpinner.fail('Failed to create PR')
+            actionSpinner.fail(isUpdate ? 'Failed to update PR' : 'Failed to create PR')
             if (err instanceof Error && 'stderr' in err) {
               const stderr = (err as { stderr: Buffer }).stderr?.toString?.() || ''
               if (stderr.includes('auth')) {
