@@ -80,7 +80,8 @@ vi.mock('../lib/config.js', () => ({
 
 // Mock gh CLI check
 vi.mock('../lib/gh.js', () => ({
-  isGhCliInstalled: vi.fn(() => false)
+  isGhCliInstalled: vi.fn(() => false),
+  getDefaultBranch: vi.fn(() => null)
 }))
 
 // Mock simple-git
