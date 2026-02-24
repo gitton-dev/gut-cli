@@ -3,7 +3,7 @@ import { Command } from 'commander'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { type CommitSearchResult, findTemplate, searchCommits } from '../lib/ai.js'
-import { getLanguage } from '../lib/config.js'
+import { getBaseUrl, getLanguage } from '../lib/config.js'
 import { resolveProvider } from '../lib/credentials.js'
 
 export const findCommand = new Command('find')
@@ -14,6 +14,7 @@ export const findCommand = new Command('find')
   )
   .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
+  .option('--base-url <url>', 'Base URL for API provider')
   .option('-n, --num <n>', 'Number of commits to search through', '100')
   .option('--path <path>', 'Limit search to commits affecting this path')
   .option('--author <author>', 'Limit search to commits by this author')
@@ -78,7 +79,12 @@ export const findCommand = new Command('find')
       const results = await searchCommits(
         query,
         commits,
-        { provider, model: options.model, language: getLanguage() },
+        {
+          provider,
+          model: options.model,
+          baseUrl: options.baseUrl || getBaseUrl(),
+          language: getLanguage()
+        },
         parseInt(options.maxResults, 10),
         template || undefined
       )

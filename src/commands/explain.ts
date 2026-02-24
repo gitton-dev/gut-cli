@@ -5,7 +5,7 @@ import { Command } from 'commander'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { findTemplate, generateExplanation } from '../lib/ai.js'
-import { getLanguage } from '../lib/config.js'
+import { getBaseUrl, getLanguage } from '../lib/config.js'
 import { resolveProvider } from '../lib/credentials.js'
 import { requireGhCli } from '../lib/gh.js'
 
@@ -17,6 +17,7 @@ export const explainCommand = new Command('explain')
   )
   .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
+  .option('--base-url <url>', 'Base URL for API provider')
   .option('-s, --staged', 'Explain only staged changes')
   .option('-n, --commits <n>', 'Number of commits to analyze for file history (default: 1)', '1')
   .option('--history', 'Explain file change history instead of content')
@@ -85,7 +86,12 @@ export const explainCommand = new Command('explain')
 
       const explanation = await generateExplanation(
         context,
-        { provider, model: options.model, language: getLanguage() },
+        {
+          provider,
+          model: options.model,
+          baseUrl: options.baseUrl || getBaseUrl(),
+          language: getLanguage()
+        },
         template || undefined
       )
 

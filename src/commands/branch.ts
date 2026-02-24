@@ -4,7 +4,7 @@ import { Command } from 'commander'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { findTemplate, generateBranchName } from '../lib/ai.js'
-import { getLanguage } from '../lib/config.js'
+import { getBaseUrl, getLanguage } from '../lib/config.js'
 import { resolveProvider } from '../lib/credentials.js'
 import { requireGhCli } from '../lib/gh.js'
 
@@ -26,6 +26,7 @@ export const branchCommand = new Command('branch')
   .option('-d, --description <description>', 'Use description instead of issue')
   .option('-p, --provider <provider>', 'AI provider (gemini, openai, anthropic, ollama)')
   .option('-m, --model <model>', 'Model to use (provider-specific)')
+  .option('--base-url <url>', 'Base URL for API provider')
   .option('-t, --type <type>', 'Branch type (feature, fix, hotfix, chore, refactor)')
   .option('-c, --checkout', 'Create and checkout the branch')
   .action(async (issue, options) => {
@@ -84,7 +85,12 @@ export const branchCommand = new Command('branch')
     try {
       const branchName = await generateBranchName(
         description,
-        { provider, model: options.model, language: getLanguage() },
+        {
+          provider,
+          model: options.model,
+          baseUrl: options.baseUrl || getBaseUrl(),
+          language: getLanguage()
+        },
         { type: options.type, issue: issueNumber },
         template || undefined
       )
