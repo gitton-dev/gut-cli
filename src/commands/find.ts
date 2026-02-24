@@ -3,7 +3,7 @@ import { Command } from 'commander'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { type CommitSearchResult, findTemplate, searchCommits } from '../lib/ai.js'
-import { getBaseUrl } from '../lib/config.js'
+import { getBaseUrl, getLanguage } from '../lib/config.js'
 import { resolveProvider } from '../lib/credentials.js'
 
 export const findCommand = new Command('find')
@@ -82,7 +82,8 @@ export const findCommand = new Command('find')
         {
           provider,
           model: options.model,
-          baseUrl: options.baseUrl || getBaseUrl()
+          baseUrl: options.baseUrl || getBaseUrl(),
+          language: getLanguage()
         },
         parseInt(options.maxResults, 10),
         template || undefined

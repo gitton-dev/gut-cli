@@ -4,7 +4,7 @@ import { Command } from 'commander'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { findTemplate, generateBranchName } from '../lib/ai.js'
-import { getBaseUrl } from '../lib/config.js'
+import { getBaseUrl, getLanguage } from '../lib/config.js'
 import { resolveProvider } from '../lib/credentials.js'
 import { requireGhCli } from '../lib/gh.js'
 
@@ -88,7 +88,8 @@ export const branchCommand = new Command('branch')
         {
           provider,
           model: options.model,
-          baseUrl: options.baseUrl || getBaseUrl()
+          baseUrl: options.baseUrl || getBaseUrl(),
+          language: getLanguage()
         },
         { type: options.type, issue: issueNumber },
         template || undefined

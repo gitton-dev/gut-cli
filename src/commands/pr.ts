@@ -6,9 +6,15 @@ import { Command } from 'commander'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { findTemplate, generatePRDescription } from '../lib/ai.js'
-import { getBaseUrl } from '../lib/config.js'
+import { getBaseUrl, getLanguage } from '../lib/config.js'
 import { resolveProvider } from '../lib/credentials.js'
-import { getDefaultBranch, getExistingPrUrl, isGhCliInstalled } from '../lib/gh.js'
+import {
+  getDefaultBranch,
+  getExistingPrUrl,
+  hasUpstreamBranch,
+  isGhCliInstalled,
+  pushBranchToOrigin
+} from '../lib/gh.js'
 
 // GitHub's conventional PR template paths (prioritized)
 const GITHUB_PR_TEMPLATE_PATHS = [
@@ -113,7 +119,8 @@ export const prCommand = new Command('pr')
         {
           provider,
           model: options.model,
-          baseUrl: options.baseUrl || getBaseUrl()
+          baseUrl: options.baseUrl || getBaseUrl(),
+          language: getLanguage()
         },
         template || undefined
       )
@@ -149,12 +156,49 @@ export const prCommand = new Command('pr')
           console.log(chalk.gray('\nTip: Use --copy to copy to clipboard'))
         }
       } else {
+        const readline = await import('node:readline')
+
+        // Check if remote branch exists
+        if (!hasUpstreamBranch()) {
+          const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+          })
+
+          const pushAnswer = await new Promise<string>((resolve) => {
+            rl.question(
+              chalk.cyan(`\nNo remote branch found. Push ${currentBranch} to origin? (y/N) `),
+              resolve
+            )
+          })
+          rl.close()
+
+          if (pushAnswer.toLowerCase() !== 'y') {
+            console.log(chalk.gray('Aborted. Push your branch first to create a PR.'))
+            return
+          }
+
+          const pushSpinner = ora(`Pushing ${currentBranch} to origin...`).start()
+          try {
+            pushBranchToOrigin(currentBranch)
+            pushSpinner.succeed(`Pushed ${currentBranch} to origin`)
+          } catch (err) {
+            pushSpinner.fail('Failed to push branch')
+            if (err instanceof Error && 'stderr' in err) {
+              const stderr = (err as { stderr: Buffer }).stderr?.toString?.() || ''
+              if (stderr) {
+                console.error(chalk.red(stderr.trim()))
+              }
+            }
+            return
+          }
+        }
+
         // Check if PR already exists for this branch
         const existingPrUrl = getExistingPrUrl()
         const isUpdate = !!existingPrUrl
 
         // Always ask about creating/updating PR
-        const readline = await import('node:readline')
         const rl = readline.createInterface({
           input: process.stdin,
           output: process.stdout

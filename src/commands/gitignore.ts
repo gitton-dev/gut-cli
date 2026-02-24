@@ -5,7 +5,7 @@ import { Command } from 'commander'
 import ora from 'ora'
 import { simpleGit } from 'simple-git'
 import { findTemplate, generateGitignore } from '../lib/ai.js'
-import { getBaseUrl } from '../lib/config.js'
+import { getBaseUrl, getLanguage } from '../lib/config.js'
 import { resolveProvider } from '../lib/credentials.js'
 
 // Config files that indicate language/framework
@@ -177,7 +177,8 @@ export const gitignoreCommand = new Command('gitignore')
         {
           provider,
           model: options.model,
-          baseUrl: options.baseUrl || getBaseUrl()
+          baseUrl: options.baseUrl || getBaseUrl(),
+          language: getLanguage()
         },
         template || undefined
       )
