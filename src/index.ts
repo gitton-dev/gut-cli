@@ -1,5 +1,10 @@
+import { createRequire } from 'node:module'
 import { Command } from 'commander'
 import { authCommand } from './commands/auth.js'
+
+const require = createRequire(import.meta.url)
+const pkg = require('../package.json')
+
 import { branchCommand } from './commands/branch.js'
 import { changelogCommand } from './commands/changelog.js'
 import { checkoutCommand } from './commands/checkout.js'
@@ -20,7 +25,10 @@ import { syncCommand } from './commands/sync.js'
 
 const program = new Command()
 
-program.name('gut').description('Git Utility Tool - AI-powered git commands').version('0.1.0')
+program
+  .name('gut')
+  .description('Git Utility Tool - AI-powered git commands')
+  .version(pkg.version, '-v, --version')
 
 // Branch management
 program.addCommand(cleanupCommand)
