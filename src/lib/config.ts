@@ -13,6 +13,8 @@ export interface GutConfig {
   baseUrl?: string
 }
 
+export const CONFIG_KEYS = ['lang', 'model', 'provider', 'baseUrl'] as const
+
 const DEFAULT_CONFIG: GutConfig = {
   lang: 'en'
 }
