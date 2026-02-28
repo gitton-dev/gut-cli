@@ -2,6 +2,15 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Argument, Command, Option } from 'commander'
+import { CONFIG_KEY_DESCRIPTIONS, LANGUAGE_DESCRIPTIONS } from '../lib/config.js'
+import { PROVIDER_DESCRIPTIONS } from '../lib/credentials.js'
+
+// Description lookup for argument choices
+const CHOICE_DESCRIPTIONS: Record<string, Record<string, string>> = {
+  language: LANGUAGE_DESCRIPTIONS,
+  key: CONFIG_KEY_DESCRIPTIONS,
+  provider: PROVIDER_DESCRIPTIONS
+}
 
 // Shell detection
 function detectShell(): 'bash' | 'zsh' | 'fish' {
@@ -164,6 +173,21 @@ function extractArguments(cmd: CommandWithInternals): ArgumentInfo[] | undefined
   }))
 }
 
+// Convert choices to items with descriptions
+function choicesWithDescriptions(
+  choices: string[],
+  argName: string
+): Array<{ name: string; description?: string }> {
+  const descriptionMap = CHOICE_DESCRIPTIONS[argName]
+  if (!descriptionMap) {
+    return choices.map((name) => ({ name }))
+  }
+  return choices.map((name) => ({
+    name,
+    description: descriptionMap[name]
+  }))
+}
+
 function extractCommands(program: Command): Map<string, CommandInfo> {
   const commands = new Map<string, CommandInfo>()
 
@@ -242,7 +266,9 @@ export async function handleCompletion(program: Command): Promise<boolean> {
   // Handle option value completion
   const prevOption = cmd.options.find((opt) => opt.name === env.prev)
   if (prevOption?.choices) {
-    logCompletions(prevOption.choices)
+    // Extract option name for description lookup (e.g., '--provider' -> 'provider')
+    const optName = prevOption.name.replace(/^-+/, '')
+    logCompletions(choicesWithDescriptions(prevOption.choices, optName))
     return true
   }
 
@@ -271,7 +297,7 @@ export async function handleCompletion(program: Command): Promise<boolean> {
       const argIndex = env.words - 3
       const arg = sub.arguments[argIndex]
       if (arg?.choices) {
-        logCompletions(arg.choices)
+        logCompletions(choicesWithDescriptions(arg.choices, arg.name))
         return true
       }
     }
@@ -282,7 +308,7 @@ export async function handleCompletion(program: Command): Promise<boolean> {
     const argIndex = env.words - 2
     const arg = cmd.arguments[argIndex]
     if (arg?.choices) {
-      logCompletions(arg.choices)
+      logCompletions(choicesWithDescriptions(arg.choices, arg.name))
       return true
     }
   }
